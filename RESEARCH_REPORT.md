@@ -37,18 +37,24 @@ leaking across splits — the #1 methodological error in medical ML.
 Two binary masks → single 3-class map, tumor written last. Slices filtered to those containing
 liver/tumor (per-slice, applied within each split → remains leakage-safe).
 
-### 3.3 Medical-grade training recipe (identical across NB1/NB2; YOLO uses its native trainer)
-- **Loss = Focal Tversky (α=0.7 > β=0.3, γ=1.33) + class-weighted CrossEntropy.** Tversky's asymmetry
-  penalizes **false negatives** (missed tumor) harder than false positives → **sensitivity-first**.
-  Class weights = median-frequency balancing on the **train split only**.
-- **Augmentation (Albumentations, train-only, synchronized img+mask): NO flips.** The liver is
-  *lateralized* (patient's right) and axial CT has fixed orientation, so H/V flips are anatomically
-  implausible (and empirically caused left/right confusion in the baseline). Kept: mild affine
-  (±15° rot, scale, shift), elastic/grid distortion (soft-tissue), brightness/contrast + Gaussian noise
-  (CT windowing / scanner robustness). YOLO trained with `fliplr=flipud=0`.
-- **Transfer learning:** DeepLabV3 (COCO), SegFormer-B0 (ADE20K), YOLOv26-sem (Cityscapes) pretrained
-  backbones, fine-tuned end-to-end for 3 classes. AdamW + linear-warmup→cosine, ≥50 epochs, best
-  checkpoint by validation mIoU (guards against the late-epoch over-confidence seen in the curves).
+### 3.3 Training recipe (Run A — identical across NB1/NB2; YOLO mirrors it in its native trainer)
+Derived from a multi-agent ("Claude council") review that found the first medical-grade recipe
+**overfit** (removing flips gutted regularization) and its Focal Tversky was **mis-parameterized**
+(inverted focal exponent, asymmetry washed out by a symmetric weighted-CE). The corrected recipe:
+- **Input = 2.5D:** 3 channels = adjacent slices `[i−1, i, i+1]` (real volumetric context; replaces
+  grayscale-replicated channels). Leakage-safe — neighbours are same-volume = same split.
+- **Augmentation (Albumentations, train-only): flips RESTORED** — the dominant regularizer for this
+  small dataset (ablation-confirmed) — + affine, elastic/grid distortion, brightness/contrast, noise.
+- **Tumor-slice oversampling** (WeightedRandomSampler, tumor slices 4×) → per-batch tumor prevalence
+  ~12% → ~45%.
+- **Loss = Dice + lightly class-weighted CrossEntropy** (tumor weight 6, not extreme — avoids gradient
+  spikes that amplify overfitting).
+- **Checkpoint selection by validation tumor F2** (recall-weighted) — the clinical objective, instead of
+  mIoU (which selects the least tumor-sensitive epoch).
+- **Test-time augmentation** (horizontal flip) at inference.
+- **Weight decay unified at 1e-2** across models (fixes an earlier fairness gap).
+- **Transfer learning:** DeepLabV3 (COCO), SegFormer-B0 (ADE20K), YOLOv26-sem (Cityscapes), ≥50 epochs,
+  AdamW + linear-warmup→cosine.
 
 ### 3.4 Models
 | Model | Family | Params | Source |
@@ -68,14 +74,25 @@ Controlled: same split, models, epochs; single change = {loss, flips}. Baseline 
 
 | Model | Recipe | mIoU | tumor IoU | tumor Dice | tumor sensitivity |
 |---|---|---|---|---|---|
-| DeepLabV3 | Baseline (Dice+CE, flips) | 0.751 | 0.376 | 0.546 | — (not measured in v1) |
-| DeepLabV3 | **Medical-grade (Focal Tversky, no flip)** | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| SegFormer-B0 | Baseline | 0.761 | 0.411 | 0.583 | — |
-| SegFormer-B0 | **Medical-grade** | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
-| YOLOv26-sem | Medical-grade | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| DeepLabV3 | v1 Baseline (Dice+CE, flips) | 0.751 | 0.376 | 0.546 | — |
+| DeepLabV3 | v2 (Focal Tversky, no flips) | 0.732 | 0.323 | 0.489 | 0.34 |
+| DeepLabV3 | **v3 Run-A (2.5D + oversample + F2 + flips)** | **0.768** | **0.407** | **0.578** | **0.451** |
+| SegFormer-B0 | v1 Baseline | 0.761 | 0.411 | 0.583 | — |
+| SegFormer-B0 | v2 | 0.747 | 0.376 | 0.546 | 0.40 |
+| SegFormer-B0 | **v3 Run-A** | 0.753 | 0.381 | 0.551 | 0.406 |
+| YOLOv26-sem | **v3 Run-A** | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
 
-**Hypothesis:** the medical-grade recipe raises **tumor sensitivity** (Focal Tversky) and reduces
-left/right confusion (no flips), possibly trading a little precision — the expected clinical trade-off.
+**Findings.** (1) **v2 regressed** on every metric — removing flips caused overfitting (train loss
+0.16→0.07, val loss diverged) and the Focal Tversky was mis-parameterized (inverted focal exponent,
+asymmetry washed out by a symmetric weighted-CE). (2) **v3 Run-A fixed the overfitting** (val loss stable
+~0.30, no divergence) and made **DeepLabV3 the best model** (tumor Dice 0.546→0.578, tumor sensitivity
+0.34→0.451, tumor→liver leakage 0.60→0.49). (3) The bundle helped **DeepLabV3 far more than SegFormer**,
+because its dominant lever — the weight-decay fix (1e-4→1e-2) — applied only to the under-regularized CNN;
+the already-regularized 3.7M transformer stayed ~neutral. The model **ranking flipped**: DeepLabV3 now
+leads on tumor and mIoU. (4) **Remaining limitation:** a val→test tumor-recall gap (~0.70 → ~0.45) and
+high per-patient variance (tumor Dice 0.47±0.30) reflect patient heterogeneity — the ceiling of a small
+2D patient-level split; 3D/more data is the Part-2 direction. All three final-benchmark models use the
+identical v3 recipe for fairness; v1/v2 are the controlled ablation.
 
 ## 6. Error analysis (baseline observations, to re-confirm on v2)
 - Dominant error: **tumor→liver** (50–54% of tumor pixels) — lesions sit inside the liver, are small,
