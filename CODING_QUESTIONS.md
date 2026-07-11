@@ -164,10 +164,12 @@ channels encode neighbouring slices, not colour).
 ## 5. Error Analysis & Final Comparison (Task H)
 
 **Q: Which model achieved the best mIoU and why for this data?**
-**DeepLabV3 (0.768).** (1) Our fairness fix (unifying weight-decay to 1e-2) most benefited the large,
-previously under-regularised 42 M CNN, which had the capacity to exploit 2.5D context + oversampling;
-(2) **ASPP's multi-scale receptive field** matches LiTS's large size variation. The small, already-
-regularised SegFormer gained less — which flipped the ranking from earlier baselines.
+**DeepLabV3 (0.768).** Run-A was applied as a *bundle* (2.5D + oversampling + F2 selection + flips +
+unified weight-decay), so we attribute the *direction* from the ablation rather than isolating one factor.
+Two likely drivers: (1) the **weight-decay unification (1e-4 → 1e-2)** applied only to the large,
+previously under-regularised 42 M CNN — the small 3.7 M SegFormer was already at 1e-2 and gained less,
+which is why the ranking flipped from earlier baselines; (2) **ASPP's multi-scale receptive field** suits
+the large liver-vs-tiny-tumor size range, and DeepLabV3's extra capacity exploits the 2.5D context.
 
 **Q: Which class was hardest across all three, and why?**
 **Tumor** (IoU 0.34–0.41). Statistical: ~0.4% of pixels (extreme imbalance). Visual: small, low-contrast
