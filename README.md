@@ -117,6 +117,10 @@ the epoch with the best tumor-F2 — a recall-weighted, clinically-aligned crite
 
 ## 5. Quantitative results (Task F)
 
+<img src="figures/task_h_summary_table.png" width="920">
+
+*Full metric comparison across the three models; the **best value per metric is highlighted**.*
+
 Per-class IoU makes the story obvious — the models are near-identical on background and liver, and separate
 **only on tumor**:
 
