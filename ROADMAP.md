@@ -91,5 +91,7 @@ the strongest research angle a **quantitative, reproducible study**, not a demo.
 7. **Insights & failure analysis**, **reproducibility**, **threats to validity**
 8. **Deliverables** (notebook(s) + report/figures) & timeline
 
-> **Awaiting your topic choice** (see the question I've posed). On selection I write the full
-> `Research Project/RESEARCH_PLAN.md` immediately.
+### Topic — DECIDED by 3-advisor council: **Single-image dehazing via the Dark Channel Prior**
+Non-medical restoration; the only Idea-Bank topic where the classical-vs-learned question stays *genuinely open*;
+viva-defensible classical operators; paired-GT benchmarks (RESIDE/O-HAZE) → quantitative PSNR/SSIM. Full plan:
+**[Research Project/RESEARCH_PLAN.md](Research Project/RESEARCH_PLAN.md)**. (Runner-up: cell-counting via watershed.)
