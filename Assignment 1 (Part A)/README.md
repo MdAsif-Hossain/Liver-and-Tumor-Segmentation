@@ -29,7 +29,7 @@
 | SegFormer-B0 | 0.753 | 0.829 | 0.885 | 0.381 | 0.551 | 0.406 | **3.7 M** | **105 min** |
 | YOLOv26-sem | 0.749 | 0.819 | **0.914** | 0.338 | 0.505 | 0.347 | 6.5 M | 356 min |
 
-**DeepLabV3 wins** on mIoU and every tumor metric; **SegFormer-B0 is the efficiency champion** (11× smaller,
+**DeepLabV3 wins** on mIoU and the pooled tumor metrics (tumor IoU / Dice / sensitivity); **SegFormer-B0 is the efficiency champion** (11× smaller,
 2.4× faster, ~1.5 mIoU points behind); **YOLO** leads on liver but is weakest on tumor. Liver is essentially
 solved (~0.90 IoU); **tumor is the hard, extremely-imbalanced class** and the true differentiator.
 
@@ -75,8 +75,8 @@ alignment are correct:
   neighbours are same-volume = same split).
 - **Augmentation (train only, Task C):** flips + affine + elastic/grid distortion + brightness/contrast +
   Gaussian noise, applied to image **and** mask synchronously via a single `Albumentations` call.
-- **Tumor-slice oversampling:** `WeightedRandomSampler` (tumor slices 4×) → per-batch tumor prevalence
-  ~12% → ~45%.
+- **Tumor-slice oversampling:** `WeightedRandomSampler` (tumor slices 4×) → in the filtered train set (~38.6%
+  tumor slices) this raises per-batch tumor prevalence to **~71%** (4·p/(1+3·p), p≈0.386).
 - **Loss:** `Dice + light class-weighted CrossEntropy [0.3, 1, 6]` (DeepLabV3 adds 0.4× auxiliary-head loss).
 - **Optimisation:** AdamW, warmup(3) → cosine, weight-decay 1e-2, AMP, ≥ 50 epochs.
 - **Model selection:** best checkpoint by **validation tumor-F2** (recall-weighted), not mIoU.
