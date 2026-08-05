@@ -26,7 +26,11 @@ Legend: 🖥️ GPU · 📎 attach · 📤 publish output as dataset.
 
 ## Project 2 — Assignment 2 (Part B): self-supervised *(6 notebooks, code-complete)*
 
-🖥️ **P100** (stable single GPU) or **T4 ×2** · Internet **On** (ImageNet / DINOv2 weights).
+🖥️ **T4 ×2 for every notebook** · Internet **On** (ImageNet / DINOv2 weights).
+**Why T4 and not P100:** all notebooks train under **AMP (fp16)**. T4 has **tensor cores** (~65 TFLOPS fp16);
+P100 has **none**, so AMP barely helps it. SimCLR and MAE additionally wrap the SSL model in `nn.DataParallel`,
+so they use **both** T4s (set `USE_DATA_PARALLEL = False` to disable). BYOL and DINOv2 stay single-GPU on purpose —
+their EMA-target/BatchNorm semantics are sensitive to per-device batch splitting.
 Each method notebook is standalone and covers the PDF's internal order **(1)–(8)**: setup+version pins → load
 splits → **50-ep SSL pretrain** (pretext curve + per-epoch time) → decoder attach → **50-ep fine-tune** on the
 labelled *val* split (monitored on *test*) → Task E metrics → **Task F error analysis** → `results.json`.
