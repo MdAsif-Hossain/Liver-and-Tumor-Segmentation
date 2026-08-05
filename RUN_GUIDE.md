@@ -1,72 +1,93 @@
 # Universal Run Guide — how to run every notebook, in order
 
-This is the single source of truth for **what to attach, which GPU to pick, and what order to run** across all
-three projects. Everything runs on **Kaggle** (the local repo is for authoring only). For each notebook: set it
-**Public**, **Run All**, confirm outputs are visible, then **Save Version**.
+Single source of truth for **what to attach, which GPU, and what order**. Everything runs on **Kaggle** (the local
+repo is for authoring only). For every notebook: **Run All** → confirm outputs visible → set **Public** → **Save
+Version** → **publish the output as a Kaggle Dataset** if a later notebook needs it.
 
-Legend: 🖥️ = GPU setting · 📎 = datasets to attach · ▶️ = run order · 📤 = output to publish as a Kaggle Dataset.
+Legend: 🖥️ GPU · 📎 attach · 📤 publish output as dataset.
 
 ---
 
-## Project 1 — Assignment 1 (Part A): supervised benchmark  *(already complete)*
+## Project 1 — Assignment 1 (Part A): supervised benchmark *(complete)*
 
-🖥️ **GPU: T4 ×2** (or P100) · Internet: **On** (downloads pretrained weights).
+🖥️ **T4 ×2** (or P100) · Internet **On**.
 
-| # | Notebook | 📎 Attach | Notes |
+| ▶️ | Notebook | 📎 Attach |
+|---|---|---|
+| 1 | `eda-and-data-prep` | LiTS 256×256 → 📤 publish (`split.json`, `class_weights.json`, `manifest.csv`) |
+| 2 | `seg-deeplabv3` | LiTS + NB0 output |
+| 3 | `seg-segformer-b0` | LiTS + NB0 output |
+| 4 | `seg-yolov26-semantic` | LiTS + NB0 output |
+
+**LiTS:** `sodko3/lits-dataset-liver-and-tumor-segmentation-256x256`.
+**Critical:** notebooks 2–4 attach the **same NB0 output** so the split is byte-identical.
+
+---
+
+## Project 2 — Assignment 2 (Part B): self-supervised *(6 notebooks, code-complete)*
+
+🖥️ **P100** (stable single GPU) or **T4 ×2** · Internet **On** (ImageNet / DINOv2 weights).
+Each method notebook is standalone and covers the PDF's internal order **(1)–(8)**: setup+version pins → load
+splits → **50-ep SSL pretrain** (pretext curve + per-epoch time) → decoder attach → **50-ep fine-tune** on the
+labelled *val* split (monitored on *test*) → Task E metrics → **Task F error analysis** → `results.json`.
+
+| ▶️ | Notebook | 📎 Attach | Produces |
 |---|---|---|---|
-| ▶️1 | `eda-and-data-prep` | LiTS 256×256 dataset | 📤 publish output → contains `split.json`, `class_weights.json`, `manifest.csv` |
-| ▶️2 | `seg-deeplabv3` | LiTS + NB0 output | reads `split.json`; appends to `results.json` |
-| ▶️3 | `seg-segformer-b0` | LiTS + NB0 output | same split |
-| ▶️4 | `seg-yolov26-semantic` | LiTS + NB0 output | Task-H final comparison |
+| 1 | `lits-ssl-data-prep` | LiTS + **Part-A NB0 output** | 📤 `partB_split_roles.json`, sanity grid |
+| 2 | `lits-simclr` | LiTS + **data-prep output** | 📤 `results.json`, `simclr_per_image_iou.csv`, curves, Task-F grids |
+| 3 | `lits-byol` | LiTS + data-prep output | 📤 same for BYOL |
+| 4 | `lits-mae` | LiTS + data-prep output | 📤 same for MAE |
+| 5 | `lits-dinov2` | LiTS + data-prep output | 📤 same + **frozen-vs-fine-tuned** comparison |
+| 6 | `lits-partB-final-comparison` | data-prep + **all 4 method outputs** + **Part-A `results.json`** | label-efficiency table/charts + consolidated Task F |
 
-**LiTS dataset:** `sodko3/lits-dataset-liver-and-tumor-segmentation-256x256` (search Kaggle "LiTS 256x256").
-**Critical:** NB1–4 must all attach the **same NB0 output** so the split is byte-identical.
+**Run notebook 2 (SimCLR) first and confirm it completes** — BYOL/MAE share its exact structure, so any bug
+found there applies to all three.
 
----
+**Timing / quota.** Each method is 50 SSL + 50 fine-tune epochs. Run methods on **different days** if you hit the
+weekly GPU quota. Every notebook prints **seconds/epoch**; per the PDF, if either stage exceeds **10 min/epoch**,
+split that method into a `-pretrain` (📤 saves encoder) + `-downstream` pair. **DINOv2 (ViT + multi-crop) is the
+most likely to need this** — check its printed epoch time first.
 
-## Project 2 — Assignment 2 (Part B): self-supervised  *(building now)*
+**Notes.** DINOv2 runs at **224×224** (ViT-S/14 needs a 14-divisible size); the ResNet methods use 256. DINOv2's
+self-distillation stage has a **fallback**: if it can't run, it drops to released DINOv2 weights and still
+completes the segmentation stage.
 
-🖥️ **GPU: P100** (single, stable) **or T4 ×2** (bigger batch) · Internet: **On** (ImageNet / DINOv2 checkpoints).
-Each method notebook is standalone: SSL-pretrain (50 ep) → transfer encoder → fine-tune on the small **val** split
-(50 ep) → evaluate on **test** split.
-
-| # | Notebook | 📎 Attach | 🖥️ | Notes |
-|---|---|---|---|---|
-| ▶️1 | `lits-ssl-data-prep` | LiTS + **Part-A NB0 output** (`split.json`) | T4×2 | reuses Part-A split, remaps SSL roles. 📤 publish → `partB_split_roles.json` |
-| ▶️2 | `lits-simclr` | LiTS + **Part-B data-prep output** | P100/T4×2 | ResNet-50, NT-Xent → DeepLabV3. **Run this first** — validates the whole pipeline; BYOL/MAE copy it |
-| ▶️3 | `lits-byol` | LiTS + data-prep output | P100/T4×2 | ResNet-50 online+EMA target |
-| ▶️4 | `lits-mae` | LiTS + data-prep output | P100/T4×2 | ResNet-50 CNN-MAE (no adapter) |
-| ▶️5 | `lits-dinov2` | LiTS + data-prep output | P100/T4×2 | ViT-S/14 + token→grid adapter; runs the frozen-vs-fine-tuned experiment |
-| ▶️6 | `lits-partB-final-comparison` | data-prep output + all method outputs + **Part-A `results.json`** | none/T4 | label-efficiency table + chart |
-
-**If a ViT method's epoch >10 min:** split into `…-pretrain` (saves encoder as a 📤 dataset) + `…-downstream`
-(attaches that encoder). Report the measured per-epoch time in the config cell either way.
-
-**Run budget:** SSL 50 ep + fine-tune 50 ep per method. Run methods on **separate days** if you hit Kaggle's
-weekly GPU quota. Each method appends to its own `results.json`; the final notebook merges them.
+### 🔬 EXTRA cells
+Each method notebook ends with a clearly-marked **EXTRA — additional research visualisations** section
+(t-SNE feature progression · per-patient variance & lesion-size sensitivity · confidence calibration). These are
+**not required by the assignment** and can be skipped; everything above that banner is the graded work.
 
 ---
 
-## Project 3 — Research: single-image dehazing (Dark Channel Prior)  *(building now)*
+## Project 3 — Research: dehazing via Dark Channel Prior
 
-🖥️ **GPU: None needed** for DCP (pure CPU, seconds/image) — pick **GPU only** if you run the optional learned
-reference (AOD-Net/FFA-Net). Internet: **On** (only for the optional learned baseline weights).
+🖥️ **None** (DCP is CPU, seconds/image) — GPU **only** for the optional learned reference. Internet **On** only
+for that optional baseline.
 
-| # | Notebook | 📎 Attach | 🖥️ | Notes |
-|---|---|---|---|---|
-| ▶️1 | `dehaze-dcp-pipeline` | RESIDE-SOTS **or** O-HAZE (else built-in synthetic-haze fallback runs) | None | implements DCP; stage-by-stage figures; sanity PSNR/SSIM |
-| ▶️2 | `dehaze-ablation-eval` | same dehazing dataset | None | the **research** notebook: full ablation sweep → tables + figures |
-| ▶️3 | `dehaze-learned-reference` *(optional)* | same + pretrained dehaze weights | GPU | positions DCP vs a deep model |
+| ▶️ | Notebook | 📎 Attach |
+|---|---|---|
+| 1 | `dehaze-dcp-pipeline` | RESIDE-SOTS or O-HAZE *(else synthetic fallback runs)* |
+| 2 | `dehaze-ablation-eval` | same dataset |
 
-**Datasets (search Kaggle):** "RESIDE SOTS" / "RESIDE standard" (synthetic, perfectly paired GT — **primary**),
-"O-HAZE" and "I-HAZE" (real haze pairs), "Dense-Haze NTIRE 2019" (hard cases). If none is attached, both notebooks
-**auto-fall back** to synthetic haze generated from clear images via the haze model `I = J·t + A(1−t)`, so they run
-anywhere — but attach RESIDE for the reportable numbers.
+**Datasets:** search Kaggle for "RESIDE SOTS" (synthetic, perfectly paired — **primary**), "O-HAZE"/"I-HAZE"
+(real pairs), "Dense-Haze NTIRE 2019". With none attached both notebooks **auto-generate synthetic haze**
+(`I = J·t + A(1−t)`) so they run anywhere — but attach RESIDE for reportable numbers.
 
 ---
 
-## Global checklist before every submission
-- [ ] Notebook **Public**, **Run All** with **all outputs visible**, then **Save Version**.
-- [ ] Correct dataset(s) attached and the **exact path** resolves (each notebook prints what it found).
-- [ ] GPU set as above (or None where noted) so you don't burn quota on CPU-only work.
-- [ ] Outputs that feed a later notebook are **published as a Kaggle Dataset** and attached downstream.
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `assert roles_paths` fails | The Part-B data-prep output isn't attached (needs `partB_split_roles.json`) |
+| `split.json` not found (data-prep) | Attach the **Part-A NB0 output** dataset |
+| CUDA probe prints "failed → CPU" | Kaggle gave a bad GPU — restart the session / re-pick the accelerator |
+| OOM during SSL | Lower `CONFIG["ssl_batch"]` (96 → 48 → 32) |
+| Epoch > 10 min | Split that method into pretrain + downstream notebooks (PDF allows it) |
+| Final comparison shows "No SSL results" | Attach every method notebook's output (each has its own `results.json`) |
+
+## Pre-submission checklist
+- [ ] All notebooks **Run All**, outputs visible, **Public**, **Saved**.
+- [ ] Outputs feeding later notebooks published as Datasets and attached downstream.
+- [ ] Part B: **6 Kaggle links** (or more if a method was split) listed one-per-line in the Classroom post.
+- [ ] Reports exported to PDF (Part B: two-column LaTeX with the mandatory Insights section).

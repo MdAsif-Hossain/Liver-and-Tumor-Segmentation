@@ -62,7 +62,10 @@ Insights section, viva-ready. Execution order and quality bar:
 ### Report (LaTeX two-column, 4–6 pp) — §6.1–6.10, **mandatory Insights §6.9**, no lit-review.
 ### Known risk to close early: ViT token→ASPP shape (assert `H·W==N` on one batch first).
 
-**Status: NB0 done; NB1 (SimCLR) is the next build.**
+**Status: all 6 notebooks BUILT, syntax-clean, and AUDITED against the PDF — Tasks A–F all covered**
+(data-prep · SimCLR · BYOL · MAE · DINOv2 · final-comparison). Task F error analysis + version pins were added in
+the compliance pass; each method notebook also ends with a clearly-marked **EXTRA (research-only)** section.
+**Next step: run on Kaggle in order — see [RUN_GUIDE.md](RUN_GUIDE.md).**
 
 ---
 
