@@ -1,0 +1,135 @@
+
+--- Cell 1 (markdown) ---
+# CSE 438 · Part B — DINOv2 (ViT-S/14) → ASPP head (LiTS, 3-class)  **Group 01 · Dept. of CSE, East West University** — Md. Asif Hossain (2022-3-60-00...
+
+--- Cell 2 (code) ---
+from torch.utils.data import Dataset, DataLoader
+def select_device():
+def amp_ctx(): return torch.autocast("cuda", dtype=torch.float16) if AMP else nullcontext()
+
+--- Cell 3 (code) ---
+def _fmt_df(df, fmt=None):
+def styled_table(df, title="", best=None, fmt=None):
+def table_png(df, path, title="", best=None, fmt=None):
+
+--- Cell 4 (markdown) ---
+## 1. Split roles + LiTS loaders...
+
+--- Cell 5 (code) ---
+def vskey(p):
+def load_25d(vol, sl):
+def fuse_label(vol, sl):
+def parse_ids(ids): return [tuple(int(x) for x in s.split("_")) for s in ids]
+
+--- Cell 6 (markdown) ---
+## 2. Datasets (multi-crop pretrain + labelled/eval @224)...
+
+--- Cell 7 (code) ---
+# ===== datasets: DINO multi-crop (pretrain) + labelled/eval @224 (14-divisible) =====
+class LabelledDataset(Dataset):
+finetune_loader = DataLoader(LabelledDataset(roles["labelled_finetune"], label_tf), batch_size=CONFIG["seg_batch"], shuffle=True, num_workers=2, pin_memory=pin, persistent_workers=True, drop_last=True)  # avoid 1-image final batch
+test_loader = DataLoader(LabelledDataset(roles["eval_monitor_test"], eval_tf), batch_size=CONFIG["seg_batch"], shuffle=False, num_workers=2, pin_memory=pin, persistent_workers=True)
+class DinoMC(Dataset):
+def collate_mc(batch):
+dino_loader = DataLoader(DinoMC(roles["unlabelled_pretrain"], CONFIG["dino_local"]), batch_size=CONFIG["ssl_batch"],
+
+--- Cell 8 (markdown) ---
+## 3. Stage A — DINO self-distillation continuation (50 ep)...
+
+--- Cell 9 (code) ---
+# if >10 min/epoch, split this into a pretrain + downstream notebook pair (brief allows it). =====
+def load_dino():
+        m = Dinov2Model.from_pretrained("facebook/dinov2-small"); print("DINOv2-small pretrained loaded.")
+        print("pretrained unavailable -> random init:", type(e).__name__)
+class DINOHead(nn.Module):
+def dino_out(enc, head, crops): return [head(enc(pixel_values=c).last_hidden_state[:, 0]) for c in crops]
+def dino_loss(s_out, t_out, center, tps=0.1, tpt=0.04):
+        student.train(); losses = []; t0 = time.time()
+    pretrained_encoder = student; dino_ok = True
+    pd.DataFrame(ssl_hist).to_csv(WORK/"dinov2_pretrain_history.csv", index=False)
+    plt.tight_layout(); plt.savefig(WORK/"dinov2_pretrain_curve.png", dpi=140); plt.show()
+    pretrained_encoder = load_dino().to(device)
+
+--- Cell 10 (markdown) ---
+## 4. Stage B — DINOv2 encoder + ASPP head (token→grid adapter) + metrics...
+
+--- Cell 11 (code) ---
+class ASPPConv(nn.Sequential):
+class ASPPPool(nn.Module):
+class ASPP(nn.Module):
+class DINOv2Seg(nn.Module):
+def dice_loss(lg, tgt, eps=1.0):
+def criterion(out, tgt): lg = out["out"].float(); return F.cross_entropy(lg, tgt, weight=ce_w) + dice_loss(lg, tgt)
+class ConfMat:
+def evaluate(model, loader):
+    model.eval(); cm=ConfMat(CONFIG["num_classes"])
+        with amp_ctx(): out=model(x)["out"]
+
+--- Cell 12 (markdown) ---
+## 5. Stage B — frozen (linear-probe) vs fine-tuned (required experiment)...
+
+--- Cell 13 (code) ---
+def run_finetune(frozen, tag):
+    enc = copy.deepcopy(pretrained_encoder)
+    model = DINOv2Seg(enc, CONFIG["num_classes"]).to(device)
+    for p in model.encoder.parameters(): p.requires_grad = not frozen or False  # frozen: encoder off
+        for p in model.encoder.parameters(): p.requires_grad = False
+    head_params = list(model.aspp.parameters()) + list(model.head.parameters())
+    if not frozen: groups.append({"params": model.encoder.parameters(), "lr": CONFIG["seg_lr_enc"]})
+            for p in model.encoder.parameters(): p.requires_grad = True
+        model.train(); tl=[]; t0=time.time()
+            with amp_ctx(): out=model(x)
+        sched.step(); tm,_=evaluate(model, test_loader)
+        hist.append({"epoch":ep, "train_loss":float(np.mean(tl)), "test_mIoU":tm["mIoU"], "test_tumor_iou":tm["per_class_iou"][2]})
+        print(f"  [{tag}] ep {ep}: loss {hist[-1]['train_loss']:.4f} | test mIoU {tm['mIoU']:.4f}")
+        if tm["mIoU"]>best: best=tm["mIoU"]; best_state=copy.deepcopy({k:v.cpu() for k,v in model.state_dict().items()})
+    model.load_state_dict(best_state); model.to(device)
+    return model, pd.DataFrame(hist), evaluate(model, test_loader)[0]
+print("=== FROZEN (linear probe) ==="); frozen_model, frozen_df, frozen_metrics = run_finetune(True, "frozen")
+print("=== FINE-TUNED ==="); ft_model, ft_df, ft_metrics = run_finetune(False, "finetune")
+seg = ft_model  # fine-tuned is the reported model
+
+--- Cell 14 (markdown) ---
+## 6. Test evaluation + confusion...
+
+--- Cell 15 (code) ---
+    "n_labelled_finetune": len(roles["labelled_finetune"]), "n_pretrain": len(roles["unlabelled_pretrain"]),
+
+--- Cell 16 (markdown) ---
+## 7. Qualitative predictions...
+
+--- Cell 17 (code) ---
+def denorm(t): return np.clip(t.permute(1,2,0).numpy()*np.array(IMAGENET_STD)+np.array(IMAGENET_MEAN), 0, 1)
+ds = LabelledDataset(roles["eval_monitor_test"][:200], eval_tf); picks=[]
+
+--- Cell 18 (markdown) ---
+## 8. Task F — Error analysis (REQUIRED)  Per the assignment (§3.6): visualise the **worst-performing test images (lowest per-image IoU)** against gro...
+
+--- Cell 19 (code) ---
+def per_image_scores(model, ids, tf, batch=8):
+    model.eval(); ds = LabelledDataset(ids, tf)
+        with amp_ctx(): pr = model(x.to(device, non_blocking=pin))["out"].argmax(1).cpu()
+def error_map(pred, gt):
+ds_all = LabelledDataset(roles["eval_monitor_test"], eval_tf)
+
+--- Cell 20 (markdown) ---
+**Discussion (Task F).** The worst slices are dominated by **tiny or boundary-adjacent lesions**, and the error maps are overwhelmingly **red (tumour ...
+
+--- Cell 21 (markdown) ---
+## Summary DINOv2 patch tokens reshaped to a 2-D grid feed the Part-A ASPP decoder. The frozen-vs-fine-tuned comparison (a large gap ⇒ the SSL feature...
+
+--- Cell 22 (markdown) ---
+---  # 🔬 EXTRA — additional research visualisations  > ### ⚠️ NOT REQUIRED BY THE ASSIGNMENT > Everything **above** this line satisfies Tasks A–F of *...
+
+--- Cell 23 (code) ---
+        ds = LabelledDataset(roles["eval_monitor_test"][:max_n], eval_tf)
+    _ssl_enc = pretrained_encoder.to(device).eval()
+    stages = [("ImageNet init (pre-SSL)", f_init), ("after SSL pretraining", f_ssl), ("after fine-tuning", f_ft)]
+
+--- Cell 24 (code) ---
+
+--- Cell 25 (code) ---
+def confidence_stats(model, ids, tf, max_batches=40):
+    model.eval(); dl = _DL(LabelledDataset(ids, tf), batch_size=8, shuffle=False, num_workers=2, pin_memory=pin, persistent_workers=True)
+        with amp_ctx(): lg = model(x.to(device, non_blocking=pin))["out"].float()
+print(f"confidence gap = {c_ok.mean()-c_bad.mean():+.3f}. A small gap means the model is over-confident where it "

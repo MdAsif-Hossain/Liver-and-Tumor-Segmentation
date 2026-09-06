@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Viva Preparation — CSE 438 Part B</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  :root{
+    --ink:#111; --ink2:#444; --muted:#777; --rule:#d8d8d2;
+    --blue:#2a78d6; --orange:#eb6834; --aqua:#1baf7a; --violet:#4a3aa7; --red:#c0392b;
+    --bg-soft:#f7f7f4;
+  }
+  *{box-sizing:border-box}
+  body{
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    color:var(--ink); line-height:1.5; font-size:10.6pt;
+    max-width:190mm; margin:0 auto; padding:8mm 4mm;
+  }
+  .bn{
+    font-family:"Nirmala UI","Noto Sans Bengali","Noto Serif Bengali","Vrinda",
+                "Shonar Bangla",sans-serif;
+    color:#1a3a5c; line-height:1.75; font-size:10.4pt;
+    background:#f4f8fc; border-left:3px solid var(--blue);
+    padding:6px 10px; margin:5px 0 0 0; border-radius:0 3px 3px 0;
+  }
+  h1{font-size:19pt;margin:0 0 2px;letter-spacing:-.3px}
+  .sub{color:var(--muted);font-size:9.6pt;margin-bottom:14px}
+  h2{
+    font-size:13.5pt;margin:22px 0 8px;padding:6px 10px;
+    background:var(--ink);color:#fff;border-radius:3px;
+  }
+  h3{font-size:11.4pt;margin:14px 0 4px;color:var(--ink);
+     border-bottom:1.5px solid var(--rule);padding-bottom:3px}
+  .q{font-weight:700;color:var(--ink);margin:14px 0 4px;
+     padding-left:9px;border-left:3px solid var(--orange)}
+  p{margin:4px 0}
+  .term{font-weight:700;color:var(--blue)}
+  .eq{
+    background:var(--bg-soft);border:1px solid var(--rule);border-radius:4px;
+    padding:8px 12px;margin:7px 0;font-family:"Cambria Math",Cambria,Georgia,serif;
+    font-size:11pt;text-align:center;
+  }
+  .note{background:#fff8e6;border-left:3px solid #eda100;padding:7px 10px;
+        margin:8px 0;font-size:10pt;border-radius:0 3px 3px 0}
+  table{border-collapse:collapse;width:100%;margin:8px 0;font-size:9.8pt}
+  th{background:#eceae5;text-align:right;padding:5px 8px;font-weight:600;
+     border-bottom:1.5px solid var(--rule)}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:4px 8px;border-bottom:1px solid #eee;font-variant-numeric:tabular-nums}
+  tr:nth-child(even) td{background:#fafaf8}
+  .best{background:#dff0e4!important;font-weight:700}
+  ul{margin:4px 0 4px 18px;padding:0} li{margin:2px 0}
+  .pill{display:inline-block;background:var(--bg-soft);border:1px solid var(--rule);
+        border-radius:10px;padding:1px 8px;font-size:9pt;color:var(--ink2)}
+  .avoid-break{break-inside:avoid}
+  hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+</style>
+</head>
+<body>
+
+<h1>Viva Preparation — CSE 438 Part B</h1>
+<div class="sub">Self-Supervised Learning for Semantic Segmentation · LiTS 256×256 ·
+Group 01 · Md. Asif Hossain, Nabil Subhan, K M Nudar &nbsp;|&nbsp;
+<span class="pill">English + বাংলা</span></div>
+
+<div class="note">
+<b>How to use this.</b> This is a study guide to build understanding — not a script to memorise.
+Examiners ask follow-ups, so aim to be able to re-derive each idea in your own words. For the
+code questions (§4A), the answer must come from <i>your</i> notebook — the anchors below tell you
+what to look at.
+<div class="bn"><b>কীভাবে ব্যবহার করবেন।</b> এটি বোঝার জন্য একটি স্টাডি গাইড — মুখস্থ করার স্ক্রিপ্ট নয়।
+পরীক্ষক ফলো-আপ প্রশ্ন করবেন, তাই প্রতিটি ধারণা নিজের ভাষায় ব্যাখ্যা করতে পারা জরুরি। কোড-সংক্রান্ত
+প্রশ্নের (§4A) উত্তর আপনার নিজের নোটবুক থেকেই আসতে হবে।</div>
+</div>
+
+<!-- ================================================================= -->
+<h2>1 · Basic Terms — what, why, what it does</h2>
+
+<h3 class="avoid-break">1.1 Semantic segmentation</h3>
+<p><b>What:</b> assigning a class label to <i>every pixel</i>. Our classes: background=0, liver=1, tumour=2.
+<b>Why:</b> classification says "there is a tumour"; segmentation says "the tumour is <i>here</i>, this shape,
+this size" — needed for volumetry and treatment planning.
+<b>Does:</b> outputs a label map the same height×width as the input.</p>
+<div class="bn"><b>কী:</b> ছবির <i>প্রতিটি পিক্সেলে</i> একটি ক্লাস লেবেল বসানো। আমাদের ক্লাস: background=0,
+liver=1, tumour=2। <b>কেন:</b> classification শুধু বলে "টিউমার আছে"; segmentation বলে "টিউমার <i>এখানে</i>,
+এই আকারে" — যা আয়তন মাপা ও চিকিৎসা পরিকল্পনার জন্য দরকার। <b>কাজ:</b> ইনপুটের সমান মাপের একটি label map দেয়।</div>
+
+<h3 class="avoid-break">1.2 Supervised vs Self-supervised learning (SSL)</h3>
+<p><b>Supervised:</b> learns from human-made labels (masks). <b>Self-supervised:</b> learns from the
+<i>images alone</i> by solving a puzzle the data itself defines — no human labels.
+<b>Why it matters:</b> in medicine, images are cheap (hospitals archive them) but masks are expensive
+(a radiologist must draw each one). SSL converts cheap unlabelled images into useful features.</p>
+<div class="bn"><b>Supervised:</b> মানুষের তৈরি লেবেল (mask) থেকে শেখে। <b>Self-supervised:</b> শুধু
+<i>ছবি</i> থেকেই শেখে — ডেটা নিজেই যে ধাঁধা তৈরি করে তা সমাধান করে, কোনো মানব-লেবেল লাগে না।
+<b>কেন গুরুত্বপূর্ণ:</b> চিকিৎসা ক্ষেত্রে ছবি সস্তা কিন্তু mask ব্যয়বহুল (রেডিওলজিস্টকে হাতে আঁকতে হয়)।</div>
+
+<h3 class="avoid-break">1.3 Pretext task</h3>
+<p><b>What:</b> the fake/auxiliary task used to train an encoder without labels — e.g. "are these two
+crops from the same image?" or "reconstruct the hidden patches".
+<b>Why:</b> solving it forces the network to learn real visual structure.
+<b>Does:</b> produces a pretrained encoder; the pretext head is then thrown away.</p>
+<div class="bn"><b>কী:</b> লেবেল ছাড়া encoder ট্রেন করার জন্য বানানো কৃত্রিম কাজ — যেমন "এই দুটি crop কি
+একই ছবির?" বা "ঢেকে রাখা অংশ পুনর্গঠন করো"। <b>কেন:</b> এটি সমাধান করতে গিয়ে নেটওয়ার্ক আসল ভিজ্যুয়াল
+গঠন শিখে ফেলে। <b>কাজ:</b> একটি pretrained encoder দেয়; pretext head পরে ফেলে দেওয়া হয়।</div>
+
+<h3 class="avoid-break">1.4 Encoder / Decoder / Backbone</h3>
+<p><b>Encoder (backbone):</b> compresses the image into feature maps — "what is in it".
+<b>Decoder (head):</b> expands features back to full resolution — "where exactly". We used ResNet-50 or
+ViT-S/14 as encoder, and the <b>ASPP</b> head from DeepLabV3 as decoder for all four methods.</p>
+<div class="bn"><b>Encoder (backbone):</b> ছবিকে feature map-এ সংকুচিত করে — "কী আছে"।
+<b>Decoder (head):</b> feature থেকে আবার পূর্ণ রেজোলিউশনে ফেরায় — "ঠিক কোথায়"। আমরা encoder হিসেবে
+ResNet-50 বা ViT-S/14 এবং decoder হিসেবে DeepLabV3-এর <b>ASPP</b> head ব্যবহার করেছি।</div>
+
+<h3 class="avoid-break">1.5 Fine-tuning vs Frozen (linear probing)</h3>
+<p><b>Frozen:</b> encoder weights locked; only the decoder trains. Tests how good the features
+<i>already</i> are. <b>Fine-tuned:</b> encoder also updates (with a much smaller learning rate).
+<b>A big gap between them</b> means the features are informative but not yet arranged for per-pixel work.
+Ours: 0.7018 frozen → 0.7757 fine-tuned = <b>+0.0739</b>.</p>
+<div class="bn"><b>Frozen:</b> encoder-এর weight আটকানো, শুধু decoder ট্রেন হয় — feature <i>এমনিতেই</i>
+কত ভালো তা যাচাই করে। <b>Fine-tuned:</b> encoder-ও আপডেট হয় (অনেক ছোট learning rate-এ)।
+<b>দুটির বড় ব্যবধান</b> মানে feature তথ্যবহুল কিন্তু pixel-স্তরের কাজের জন্য এখনো সাজানো নয়।</div>
+
+<h3 class="avoid-break">1.6 Label efficiency</h3>
+<p><b>What:</b> how much accuracy you keep when you cut the labels. Our study: fine-tune on
+<b>2,553</b> labelled slices instead of <b>13,447</b> = <b>19%</b> of the labels, and measure what
+fraction of the supervised score survives (we kept 90.8–97.6%).</p>
+<div class="bn"><b>কী:</b> লেবেল কমালে কতটুকু নির্ভুলতা টিকে থাকে। আমাদের গবেষণায় ১৩,৪৪৭-এর বদলে
+মাত্র <b>২,৫৫৩</b> লেবেলযুক্ত slice = লেবেলের <b>১৯%</b> ব্যবহার করে supervised ফলাফলের ৯০.৮–৯৭.৬%
+ধরে রাখা গেছে।</div>
+
+<h3 class="avoid-break">1.7 Other terms you must know</h3>
+<ul>
+<li><span class="term">Augmentation / view</span> — a randomly transformed copy of an image (crop, flip,
+blur). Two views of one image form a "positive pair".</li>
+<li><span class="term">EMA (exponential moving average)</span> — a slowly-updated copy of the network:
+θ_target ← m·θ_target + (1−m)·θ_online. Acts as a stable teacher.</li>
+<li><span class="term">Representation collapse</span> — the failure where the encoder outputs the
+<i>same</i> vector for every image (loss looks perfect, features are useless).</li>
+<li><span class="term">Patch token</span> — a ViT splits the image into patches; each becomes a token.
+224÷14 = 16, so we get a 16×16 grid of tokens.</li>
+<li><span class="term">ASPP / atrous convolution</span> — parallel dilated convolutions that see
+multiple scales at once without losing resolution.</li>
+<li><span class="term">2.5D input</span> — 3 channels = slices [i−1, i, i+1]. Gives volumetric context
+cheaply while staying a 2D network.</li>
+<li><span class="term">Class imbalance</span> — background 97.67%, liver 2.20%, tumour <b>0.13%</b>.
+This is why pixel accuracy is useless here and why we weight the loss.</li>
+<li><span class="term">Leakage-safe split</span> — splitting by <i>patient volume</i>, not by slice,
+because adjacent slices are near-duplicates (Hamming ≈1.9 within a volume vs ≈14.2 across).</li>
+</ul>
+<div class="bn"><b>Augmentation/view</b> — এলোমেলোভাবে রূপান্তরিত অনুলিপি; একই ছবির দুটি view = positive pair।
+<b>EMA</b> — ধীরে আপডেট হওয়া নেটওয়ার্ক-অনুলিপি, স্থিতিশীল শিক্ষক হিসেবে কাজ করে।
+<b>Representation collapse</b> — encoder সব ছবির জন্য একই ভেক্টর দেয় (loss ভালো দেখায়, feature অকেজো)।
+<b>Patch token</b> — ViT ছবিকে patch-এ ভাগ করে; ২২৪÷১৪=১৬, তাই ১৬×১৬ গ্রিড।
+<b>ASPP</b> — সমান্তরাল dilated convolution, একসাথে একাধিক স্কেল দেখে।
+<b>2.5D</b> — ৩টি চ্যানেল = [i−1, i, i+1] slice।
+<b>Class imbalance</b> — tumour মাত্র ০.১৩%, তাই pixel accuracy অর্থহীন।
+<b>Leakage-safe split</b> — slice নয়, <i>রোগীর volume</i> ধরে ভাগ করা।</div>
+
+<!-- ================================================================= -->
+<h2>2 · Equations</h2>
+
+<h3 class="avoid-break">2.1 IoU, Dice, mIoU</h3>
+<div class="eq">IoU = TP / (TP + FP + FN)&nbsp;&nbsp;·&nbsp;&nbsp;
+Dice = 2TP / (2TP + FP + FN)&nbsp;&nbsp;·&nbsp;&nbsp;
+mIoU = (1/C) Σ<sub>c</sub> IoU<sub>c</sub></div>
+<p>IoU = overlap ÷ union. Dice counts the overlap twice, so it is always ≥ IoU and is gentler on small
+objects. mIoU averages IoU over the C=3 classes, so every class counts equally regardless of size —
+that is why mIoU exposes tumour failure while pixel accuracy hides it.</p>
+<div class="bn">IoU = মিল ÷ মোট এলাকা। Dice মিলকে দুবার গোনে, তাই সবসময় IoU-এর সমান বা বেশি এবং ছোট
+বস্তুর প্রতি সদয়। mIoU তিনটি ক্লাসের গড় — প্রতিটি ক্লাস সমান গুরুত্ব পায়, তাই এটি tumour-এর ব্যর্থতা
+ধরতে পারে, কিন্তু pixel accuracy তা আড়াল করে।</div>
+
+<h3 class="avoid-break">2.2 Sensitivity (recall)</h3>
+<div class="eq">Sensitivity = TP / (TP + FN)</div>
+<p>Of all true tumour pixels, what fraction did we find? Clinically the key number — a missed tumour (FN)
+is worse than a false alarm (FP). DINOv2 = 0.5218, MAE = 0.3018.</p>
+<div class="bn">প্রকৃত tumour পিক্সেলের কত অংশ আমরা ধরতে পেরেছি। চিকিৎসাগতভাবে সবচেয়ে গুরুত্বপূর্ণ —
+টিউমার মিস করা (FN) ভুল অ্যালার্মের (FP) চেয়ে খারাপ।</div>
+
+<h3 class="avoid-break">2.3 NT-Xent — SimCLR</h3>
+<div class="eq">ℓ<sub>i,j</sub> = − log [ exp(sim(z<sub>i</sub>,z<sub>j</sub>)/τ) ÷ Σ<sub>k≠i</sub> exp(sim(z<sub>i</sub>,z<sub>k</sub>)/τ) ]</div>
+<p>A softmax over cosine similarities. The numerator is the <b>positive pair</b> (two views of the same
+image); the denominator includes all <b>negatives</b> (other images in the batch). Minimising it pulls
+positives together and pushes negatives apart. τ (=0.2) sharpens the distribution: small τ = harsher
+penalty on hard negatives. <b>Negatives are what prevent collapse.</b></p>
+<div class="bn">এটি cosine similarity-র উপর একটি softmax। উপরের অংশ <b>positive pair</b> (একই ছবির দুই view),
+নিচের অংশে সব <b>negative</b> (batch-এর অন্য ছবি)। এটি minimise করলে positive কাছাকাছি আসে, negative
+দূরে যায়। τ (=০.২) বণ্টনকে ধারালো করে। <b>negative-ই collapse ঠেকায়।</b></div>
+
+<h3 class="avoid-break">2.4 BYOL loss + EMA update</h3>
+<div class="eq">L = 2 − 2·cos(p, z)&nbsp;&nbsp;(symmetrised)&nbsp;&nbsp;;&nbsp;&nbsp;
+ξ ← m·ξ + (1−m)·θ</div>
+<p>The online network's <i>prediction</i> p must match the EMA target's projection z. <b>No negatives.</b>
+Collapse is prevented by three things together: the extra <b>predictor</b> (asymmetry), the
+<b>stop-gradient</b> on the target, and the <b>slow EMA</b> (m: 0.996→1) which stops the target from
+chasing the online network. Our final loss 0.0235 → cos ≈ 0.988.</p>
+<div class="bn">online নেটওয়ার্কের <i>prediction</i> p-কে EMA target-এর projection z-এর সাথে মেলাতে হয়।
+<b>কোনো negative নেই।</b> Collapse ঠেকায় তিনটি জিনিস একসাথে: অতিরিক্ত <b>predictor</b> (অসমতা),
+target-এ <b>stop-gradient</b>, এবং <b>ধীর EMA</b>।</div>
+
+<h3 class="avoid-break">2.5 MAE reconstruction loss</h3>
+<div class="eq">L = ( Σ<sub>p∈masked</sub> |x̂<sub>p</sub> − x<sub>p</sub>| + 0.2(x̂<sub>p</sub> − x<sub>p</sub>)² ) ÷ |masked|</div>
+<p>Loss is computed <b>only on hidden pixels</b> — otherwise the network could win by copying what it can
+already see. Masking ratio 75%: too low makes the task trivial (nearby pixels give it away); too high
+leaves too little context to reconstruct anything.</p>
+<div class="bn">Loss হিসাব হয় <b>শুধু ঢাকা পিক্সেলে</b> — নইলে নেটওয়ার্ক যা দেখতে পাচ্ছে তা নকল করেই জিতে যেত।
+মাস্কিং ৭৫%: কম হলে কাজটা সহজ হয়ে যায়, বেশি হলে পুনর্গঠনের মতো যথেষ্ট প্রেক্ষাপট থাকে না।</div>
+
+<h3 class="avoid-break">2.6 DINO self-distillation</h3>
+<div class="eq">L = − Σ P<sub>teacher</sub>(x) · log P<sub>student</sub>(x')</div>
+<p>Cross-entropy between the teacher's and student's output <i>distributions</i> over different crops.
+Teacher = EMA of student. <b>Centring</b> (subtract a running mean) stops one dimension dominating and
+<b>sharpening</b> (low temperature) stops the output becoming uniform — together they prevent collapse.</p>
+<div class="bn">ভিন্ন crop-এর উপর teacher ও student-এর আউটপুট <i>বণ্টনের</i> মধ্যে cross-entropy।
+Teacher = student-এর EMA। <b>Centring</b> ও <b>sharpening</b> একসাথে collapse ঠেকায়।</div>
+
+<h3 class="avoid-break">2.7 Our segmentation loss</h3>
+<div class="eq">L = CE(weights [0.3, 1, 6]) + DiceLoss + 0.4·CE<sub>aux</sub></div>
+<p>Weighted cross-entropy handles imbalance (tumour weighted 6× vs background 0.3×); Dice directly
+optimises overlap, which CE does not; the 0.4× auxiliary term is DeepLabV3's intermediate supervision.</p>
+<div class="bn">Weighted CE ভারসাম্যহীনতা সামলায় (tumour ৬×, background ০.৩×); Dice সরাসরি overlap
+অপ্টিমাইজ করে, যা CE করে না; ০.৪× auxiliary অংশটি DeepLabV3-এর মধ্যবর্তী তত্ত্বাবধান।</div>
+
+<h3 class="avoid-break">2.8 Label-efficiency ratio</h3>
+<div class="eq">N<sub>val</sub> / N<sub>train</sub> = 2,553 / 13,447 = 0.190 → <b>19%</b></div>
+
+<!-- ================================================================= -->
+<h2>3 · Results — which model won, and why</h2>
+
+<table>
+<tr><th>Method</th><th>mIoU (sel.)</th><th>mIoU (ep.50)</th><th>Liver IoU</th><th>Tumour IoU</th><th>Tumour sens.</th></tr>
+<tr><td>Part-A supervised</td><td>0.7680</td><td>—</td><td class="best">0.9030</td><td>0.4070</td><td>0.4510</td></tr>
+<tr><td><b>DINOv2</b></td><td class="best">0.7757</td><td class="best">0.7492</td><td>0.8738</td><td class="best">0.4629</td><td class="best">0.5218</td></tr>
+<tr><td>SimCLR</td><td>0.7410</td><td>0.7087</td><td>0.8582</td><td>0.3753</td><td>0.4792</td></tr>
+<tr><td>BYOL</td><td>0.7282</td><td>0.6974</td><td>0.8381</td><td>0.3589</td><td>0.4458</td></tr>
+<tr><td>MAE</td><td>0.7205</td><td>0.7091</td><td class="best">0.8821</td><td>0.2873</td><td>0.3018</td></tr>
+</table>
+
+<h3 class="avoid-break">3.1 Best overall: DINOv2 — why</h3>
+<p>Self-distillation matches output <i>distributions</i> across multi-crop views, including small local
+crops. A local crop containing only a lesion must still produce a consistent distribution, so
+lesion-scale detail is directly rewarded. It also starts from far stronger released weights.
+<b>Honest caveat:</b> DINOv2 differs in four ways at once (ViT vs ResNet, 224² vs 256², token adapter,
+pretraining corpus) — so its win is <i>not</i> cleanly attributable to self-distillation alone.</p>
+<div class="bn">Self-distillation বিভিন্ন আকারের crop-এর উপর আউটপুট <i>বণ্টন</i> মেলায়; ছোট local crop-এ
+শুধু ক্ষত থাকলেও সেটিকে সামঞ্জস্যপূর্ণ হতে হয়, তাই ক্ষত-আকারের বিবরণ সরাসরি পুরস্কৃত হয়।
+<b>সতর্কতা:</b> DINOv2 একসাথে চারটি দিকে ভিন্ন, তাই এর জয় শুধু self-distillation-এর কৃতিত্ব নয়।</div>
+
+<h3 class="avoid-break">3.2 The most interesting result: MAE</h3>
+<p>MAE has the <b>best liver</b> (0.8821) and the <b>worst tumour</b> (0.2873). Pixel reconstruction
+rewards predicting the dominant intensity of a region. The liver is large, smooth and low-frequency —
+reconstructing it well pays off enormously in loss terms. A 200-pixel tumour is high-frequency detail
+whose contribution to the loss is negligible, so the encoder is never pressured to represent it.
+<b>Lesson: the pretext task decides <i>which</i> structures get encoded, not just how well.</b>
+This is the cleanest comparison in the study — MAE, SimCLR and BYOL share the identical backbone,
+resolution and initialisation, so nothing else could explain it.</p>
+<div class="bn">MAE-তে <b>liver সবচেয়ে ভালো</b>, <b>tumour সবচেয়ে খারাপ</b>। Pixel পুনর্গঠন বড়, মসৃণ,
+low-frequency অঞ্চলকে পুরস্কৃত করে — liver তেমনই। ২০০ পিক্সেলের tumour high-frequency বিবরণ, loss-এ যার
+অবদান নগণ্য, তাই encoder সেটি শিখতে বাধ্য হয় না। <b>শিক্ষা: pretext task ঠিক করে দেয় <i>কোন</i> গঠন
+শেখা হবে।</b> এটিই সবচেয়ে পরিচ্ছন্ন তুলনা — MAE, SimCLR, BYOL-এর backbone ও রেজোলিউশন অভিন্ন।</div>
+
+<h3 class="avoid-break">3.3 Why BYOL was weakest</h3>
+<p>Final pretext loss 0.0235 → cosine ≈ 0.988 between online and target. That is <i>consistent with</i>
+partial representation collapse (the predictor is doing almost no work), though not proof.
+The diagnostic that would settle it: mean per-dimension std of the ℓ₂-normalised projections
+(healthy ≈ 1/√d; near zero = collapsed).</p>
+<div class="bn">চূড়ান্ত pretext loss ০.০২৩৫ → cosine ≈ ০.৯৮৮। এটি আংশিক collapse-এর <i>সাথে সঙ্গতিপূর্ণ</i>
+(predictor প্রায় কিছুই করছে না), তবে প্রমাণ নয়। নিশ্চিত হওয়ার পরীক্ষা: ℓ₂-normalised projection-এর
+প্রতি-মাত্রা গড় স্ট্যান্ডার্ড ডেভিয়েশন (সুস্থ হলে ≈ ১/√d)।</div>
+
+<h3 class="avoid-break">3.4 Why SSL beat supervision on tumour but not liver</h3>
+<p>With 13,447 labels the supervised model has ample signal for the liver — labels are not the
+bottleneck, so SSL adds little. For tumour (0.13% of pixels) even 13,447 labels give few positive
+pixels, so the supervised model <i>is</i> label-limited; SSL pretraining on unlabelled images supplies
+structure that partly substitutes. <b>SSL's benefit is largest where label signal is scarcest.</b></p>
+<div class="bn">১৩,৪৪৭ লেবেল থাকায় liver-এর জন্য supervised মডেলের যথেষ্ট সংকেত আছে — লেবেলই বাধা নয়।
+কিন্তু tumour (০.১৩%) এর জন্য লেবেল সংকেত কম, তাই SSL-এর গঠনগত জ্ঞান কাজে লাগে।
+<b>যেখানে লেবেল-সংকেত সবচেয়ে কম, SSL-এর লাভ সেখানে সবচেয়ে বেশি।</b></div>
+
+<div class="note"><b>The number you must be careful with.</b> "101% of supervision" comes from the
+checkpoint <i>selected on the test set</i> — the maximum of 50 noisy evaluations, so it is biased
+upward. The unbiased epoch-50 figure is <b>0.7492 = 97.6%</b>. Always quote both and name the bias.
+<div class="bn"><b>যে সংখ্যাটি নিয়ে সাবধান।</b> "১০১%" এসেছে <i>test set-এ বাছাই করা</i> checkpoint থেকে —
+৫০টি কোলাহলপূর্ণ মূল্যায়নের সর্বোচ্চ, তাই এটি স্ফীত। নিরপেক্ষ epoch-50 মান <b>০.৭৪৯২ = ৯৭.৬%</b>।</div>
+</div>
+
+<!-- ================================================================= -->
+<h2>4 · Viva Questions from the Brief (§9)</h2>
+
+<h3>A · Coding questions — answer from YOUR notebook</h3>
+<p style="color:var(--muted);font-size:9.8pt">These ask about your own code, so the examiner expects you
+to point at it. Below is the anchor: what to show and the key fact.</p>
+
+<div class="q">Q1. How did you load the Part-A splits unmodified, and how did you verify no leakage?</div>
+<p><b>Show:</b> the data-prep cell that reads <span class="pill">split.json</span> from
+<span class="pill">/kaggle/input</span>. <b>Key facts:</b> we never re-split — we assert the three
+<i>volume</i> sets are pairwise disjoint, and print a SHA-256 fingerprint of each sorted slice list so
+every method notebook can be checked against the same stamp. Counts: 13,447 / 2,553 / 3,158.</p>
+<div class="bn"><b>দেখান:</b> <span class="pill">split.json</span> পড়ার সেল। <b>মূল কথা:</b> নতুন করে ভাগ করা
+হয়নি; তিনটি <i>volume</i> সেট পরস্পর-বিচ্ছিন্ন কিনা assert করা হয়েছে এবং প্রতিটি তালিকার SHA-256
+fingerprint ছাপা হয়েছে।</div>
+
+<div class="q">Q2. The test split is used to monitor AND to report. Why is that a departure, and what does it do to your numbers?</div>
+<p>Normally a test set is touched exactly once. Here we pick the best of 50 test evaluations, which is
+the <b>maximum of 50 noisy measurements</b> → biased upward. We measured the bias: <b>+0.011 to +0.032
+mIoU</b>. Remedy would be a fourth held-out split; we could not afford it with only 2,553 labelled
+slices.</p>
+<div class="bn">সাধারণত test set একবারই ছোঁয়া হয়। এখানে ৫০টি মূল্যায়নের সর্বোচ্চটি বাছাই করায় ফল
+<b>স্ফীত</b> হয় — আমরা মেপেছি: <b>+০.০১১ থেকে +০.০৩২ mIoU</b>। সমাধান হতো চতুর্থ একটি হোল্ড-আউট ভাগ।</div>
+
+<div class="q">Q3. SimCLR/BYOL: show your two-view augmentation. Which transforms are essential?</div>
+<p><b>Show:</b> the <span class="pill">ssl_view</span> Albumentations pipeline. <b>Essential:</b>
+RandomResizedCrop (forces the model to match different <i>parts/scales</i> of the same anatomy — this
+carries almost all the learning signal) and HorizontalFlip. <b>Deliberately weak:</b> colour jitter,
+because CT slices are effectively grayscale, so colour invariance teaches almost nothing.</p>
+<div class="bn"><b>অপরিহার্য:</b> RandomResizedCrop (একই অঙ্গের ভিন্ন <i>অংশ/স্কেল</i> মেলাতে বাধ্য করে) ও
+HorizontalFlip। <b>ইচ্ছাকৃতভাবে দুর্বল:</b> colour jitter — CT ছবি প্রায় সাদাকালো।</div>
+
+<div class="q">Q4. MAE: show your masking code. What fraction, and what if too few / too many?</div>
+<p><b>Show:</b> <span class="pill">create_patch_mask()</span> — 16×16 patches, ratio 0.75.
+<b>Too few masked:</b> the task becomes trivial — neighbouring visible pixels reveal the answer, so the
+encoder learns only local interpolation. <b>Too many:</b> not enough context remains, the task becomes
+unsolvable and the encoder learns nothing useful.</p>
+<div class="bn"><b>খুব কম ঢাকলে:</b> পাশের দৃশ্যমান পিক্সেল থেকেই উত্তর মেলে, তাই শুধু স্থানীয়
+interpolation শেখে। <b>খুব বেশি ঢাকলে:</b> যথেষ্ট প্রেক্ষাপট থাকে না, কাজটি অসম্ভব হয়ে যায়।</div>
+
+<div class="q">Q5. DINOv2: explain multi-crop and the student/teacher loss.</div>
+<p>2 <b>global</b> crops (224², wide view) + 4 <b>local</b> crops (98², zoomed). The teacher sees only
+global crops; the student sees all. The student must predict the global (whole-object) distribution
+from a local patch — that is what forces <b>local–global consistency</b>. Loss = cross-entropy between
+teacher and student distributions; teacher = EMA of student, with centring + sharpening to avoid collapse.</p>
+<div class="bn">২টি <b>global</b> crop (২২৪²) + ৪টি <b>local</b> crop (৯৮²)। Teacher শুধু global দেখে,
+student সব দেখে। student-কে ছোট অংশ থেকে সম্পূর্ণ বস্তুর বণ্টন অনুমান করতে হয় — এটিই
+<b>local–global সামঞ্জস্য</b> তৈরি করে।</div>
+
+<div class="q">Q6. Show the adapter that reshapes ViT tokens into a 2-D map. Why is it necessary?</div>
+<p><b>Show:</b> <span class="pill">token_feature_map()</span>. A ViT outputs a <i>sequence</i>
+(B, N, C); a convolutional decoder needs a <i>grid</i> (B, C, H, W). We drop the CLS token and reshape
+(B, 256, C) → (B, C, 16, 16), asserting H·W = N. <b>Also say:</b> because that grid is only 16×16 we
+reduced ASPP dilations to (3,6,9) — the standard (6,12,18) would exceed the grid and degenerate.</p>
+<div class="bn">ViT দেয় <i>ক্রম</i> (B,N,C); convolution decoder চায় <i>গ্রিড</i> (B,C,H,W)। CLS token বাদ
+দিয়ে (B,256,C) → (B,C,16,16) করা হয়। গ্রিড মাত্র ১৬×১৬ বলে ASPP dilation (৩,৬,৯)-এ নামানো হয়েছে।</div>
+
+<div class="q">Q7. Walk through the frozen-vs-fine-tuned experiment. What changed, what did you observe?</div>
+<p><b>Optimiser change:</b> frozen → <code>requires_grad=False</code> on the encoder, one param group
+(head only, LR 2e-4). Fine-tuned → two param groups, encoder unfrozen after a 2-epoch head warm-up at
+LR 1e-5 (20× smaller). <b>Observed:</b> 0.7018 → 0.7757 (<b>+0.0739</b>), and the frozen curve
+<i>declined</i> after epoch 2 while its training loss kept falling — the head was overfitting 2,553
+images with no ability to reshape the features.</p>
+<div class="bn"><b>পরিবর্তন:</b> frozen-এ encoder-এ <code>requires_grad=False</code>, একটি param group;
+fine-tuned-এ দুটি group, ২ epoch warm-up-এর পর encoder খুলে LR ১e-৫ (২০× ছোট)।
+<b>পর্যবেক্ষণ:</b> ০.৭০১৮ → ০.৭৭৫৭, এবং frozen curve ২য় epoch-এর পর <i>নামতে</i> থাকে।</div>
+
+<hr>
+<h3>B · Theory questions</h3>
+
+<div class="q">Q8. What does "self-supervised" mean precisely — how does a pretext task supervise without labels?</div>
+<p>The supervision signal is <b>constructed from the data itself</b>. We already know the answer without
+a human: we know which two crops came from the same image, we know the pixels we hid, we know what the
+teacher network output. So a normal supervised loss can be computed — the "label" is generated by the
+procedure, not annotated by a person.</p>
+<div class="bn">তত্ত্বাবধানের সংকেত <b>ডেটা থেকেই তৈরি</b>। কোন দুটি crop একই ছবির, কোন পিক্সেল আমরা ঢেকেছি,
+teacher কী দিয়েছে — সবই আমরা জানি। তাই স্বাভাবিক supervised loss হিসাব করা যায়; "লেবেল" পদ্ধতিই তৈরি করে,
+মানুষ নয়।</div>
+
+<div class="q">Q9. Explain NT-Xent. What role do negatives play?</div>
+<p>See §2.3. Negatives supply the <b>repulsive force</b>. Without them the trivial solution "map
+everything to one point" would make the numerator maximal — the loss would be perfect and the features
+useless. Negatives make that solution expensive, so SimCLR cannot collapse.</p>
+<div class="bn">Negative <b>বিকর্ষণ</b> জোগায়। এগুলো না থাকলে "সবকিছুকে এক বিন্দুতে পাঠাও" সমাধানটিই সেরা
+হতো — loss নিখুঁত, feature অকেজো। Negative সেই সমাধানকে ব্যয়বহুল করে।</div>
+
+<div class="q">Q10. Why doesn't BYOL collapse without negatives? Role of stop-gradient / EMA?</div>
+<p>Three mechanisms together: (1) the <b>predictor</b> makes the two branches asymmetric, so they cannot
+trivially agree; (2) <b>stop-gradient</b> means the target is never optimised to make the loss small;
+(3) the <b>EMA</b> target changes slowly, so it acts as a stable moving goalpost the online network
+chases but never instantly matches. Remove the predictor or the stop-gradient and BYOL does collapse.</p>
+<div class="bn">তিনটি ব্যবস্থা একসাথে: (১) <b>predictor</b> দুই শাখাকে অসম করে; (২) <b>stop-gradient</b>-এর
+কারণে target কখনো loss কমানোর জন্য অপ্টিমাইজ হয় না; (৩) <b>EMA</b> target ধীরে বদলায়। predictor বা
+stop-gradient সরালে BYOL সত্যিই collapse করে।</div>
+
+<div class="q">Q11. In MAE, why is 75% masking feasible and beneficial, unlike ~15% in NLP?</div>
+<p><b>Images are highly redundant</b> — a missing patch can usually be guessed from its neighbours.
+At 15% the task is trivial (pure local interpolation, no semantics learned). Language is far denser in
+information: each word carries much more, so hiding 75% of words would leave the sentence
+unrecoverable. So 75% is what makes the vision task hard enough to force <i>semantic</i> understanding.</p>
+<div class="bn"><b>ছবিতে প্রচুর পুনরাবৃত্তি</b> — অনুপস্থিত patch পাশের patch থেকেই অনুমান করা যায়।
+১৫% ঢাকলে কাজটি তুচ্ছ হয়ে যায়। ভাষায় প্রতিটি শব্দ অনেক বেশি তথ্য বহন করে, তাই ৭৫% শব্দ ঢাকলে বাক্য
+পুনরুদ্ধার অসম্ভব। ৭৫% মাস্কিং দৃষ্টি-কাজটিকে যথেষ্ট কঠিন করে <i>অর্থগত</i> বোঝাপড়া আদায় করে।</div>
+
+<div class="q">Q12. What is self-distillation in DINOv2? How do student and teacher differ and how is the teacher updated?</div>
+<p>The network teaches itself: the <b>student</b> is trained by gradient descent to match the
+<b>teacher</b>'s output distribution. They share architecture but not weights — the teacher's weights
+are an <b>EMA</b> of the student's (ξ ← mξ + (1−m)θ), never trained directly. The teacher sees only
+global crops, the student sees local ones too, forcing local→global consistency.</p>
+<div class="bn">নেটওয়ার্ক নিজেই নিজেকে শেখায়: <b>student</b> gradient descent-এ <b>teacher</b>-এর আউটপুট
+বণ্টন মেলাতে শেখে। স্থাপত্য এক, weight আলাদা — teacher-এর weight student-এর <b>EMA</b>, সরাসরি ট্রেন হয় না।</div>
+
+<div class="q">Q13. Linear probing vs fine-tuning. What does a large gap suggest?</div>
+<p><b>Probing</b> freezes the encoder and trains only a small head — it measures how <i>directly usable</i>
+the representation is. <b>Fine-tuning</b> updates everything. A <b>large gap</b> (ours: +0.0739) means
+the features contain the right information but are not arranged for the task — the head alone cannot
+extract it, so the encoder must move. A <b>small gap</b> would mean the representation is already
+task-ready.</p>
+<div class="bn"><b>Probing</b> encoder জমিয়ে রাখে — feature <i>সরাসরি</i> কতটা ব্যবহারযোগ্য তা মাপে।
+<b>বড় ব্যবধান</b> মানে তথ্য আছে কিন্তু কাজের উপযোগী করে সাজানো নেই। <b>ছোট ব্যবধান</b> মানে
+representation আগে থেকেই প্রস্তুত।</div>
+
+<div class="q">Q14. Why can an SSL encoder match a supervised one with far fewer labels? What is transferred?</div>
+<p>What transfers is <b>general visual structure</b> — edges, textures, shapes, part–whole relationships,
+and what makes regions similar or different. Labels are then only needed to <i>name</i> those structures
+and refine boundaries, which takes far fewer examples than learning the structures from scratch. The
+encoder learned from 13,447 unlabelled images; the labels only had to teach the final mapping.</p>
+<div class="bn">যা স্থানান্তরিত হয় তা হলো <b>সাধারণ ভিজ্যুয়াল গঠন</b> — প্রান্ত, বুনট, আকৃতি, অংশ-সমগ্র সম্পর্ক।
+লেবেল তখন শুধু সেই গঠনগুলোর <i>নামকরণ</i> ও সীমানা ঠিক করার জন্য লাগে, যাতে অনেক কম উদাহরণ যথেষ্ট।</div>
+
+<div class="q">Q15. What is representation collapse, and which methods are designed to prevent it, and how?</div>
+<table>
+<tr><th>Method</th><th>Anti-collapse mechanism</th></tr>
+<tr><td>SimCLR</td><td><b>Negatives</b> in NT-Xent — repulsion makes a constant output costly</td></tr>
+<tr><td>BYOL</td><td><b>Predictor</b> asymmetry + <b>stop-gradient</b> + slow <b>EMA</b> target</td></tr>
+<tr><td>DINOv2</td><td><b>Centring</b> (stops one dimension dominating) + <b>sharpening</b> (stops uniform output)</td></tr>
+<tr><td>MAE</td><td>Cannot collapse by construction — it must reproduce actual pixel values</td></tr>
+</table>
+<p>Collapse = the encoder maps every input to (nearly) the same vector. Loss looks excellent, downstream
+accuracy is terrible.</p>
+<div class="bn">Collapse = encoder সব ইনপুটকে প্রায় একই ভেক্টরে পাঠায়; loss চমৎকার দেখায় কিন্তু ফলাফল খারাপ।
+MAE গঠনগতভাবেই collapse করতে পারে না, কারণ তাকে প্রকৃত পিক্সেল মান ফিরিয়ে আনতে হয়।</div>
+
+<hr>
+<div class="note"><b>Three things to have on the tip of your tongue.</b>
+19% of the labels · frozen→fine-tuned gap +0.0739 · MAE best liver (0.882) / worst tumour (0.287).
+And always pair "101%" with "97.6% unbiased".
+<div class="bn"><b>মুখস্থ রাখার তিনটি বিষয়:</b> লেবেলের ১৯% · frozen→fine-tuned ব্যবধান +০.০৭৩৯ ·
+MAE-তে liver সেরা (০.৮৮২) কিন্তু tumour সবচেয়ে খারাপ (০.২৮৭)। এবং "১০১%" বললেই সাথে
+"নিরপেক্ষভাবে ৯৭.৬%" বলবেন।</div>
+</div>
+
+</body>
+</html>

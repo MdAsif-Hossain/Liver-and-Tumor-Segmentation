@@ -1,0 +1,276 @@
+
+
+=== nb1-lits-ssl-data-prep.ipynb ===
+# CSE 438 — Digital Image Processing · Assignment **Part B**
+## Self-Supervised Learning for Semantic Segmentation — Data Preparation (Task A)
+
+**Group:** 01 · Department of Computer Science and Engineering, East West University
+
+| # | Name | Student ID |
+|---|------|-----------|
+| 1 | Md. Asif Hossain | 2022-3-60-007 |
+| 2 | Nabil Subhan | 2022-3-60-063 |
+| 3 | K M Nudar | 2022-3-60-234 |
+
+**Dataset:** LiTS 256×256 (liver + tumor CT) — *same as Part A*.
+
+This notebook performs **Task A**: it loads the **identical leakage-safe split produced in Part A (NB0)**
+*unmodified*, remaps each split to its self-supervised role, builds the three role loaders, and produces
+the required sanity visualisation. No re-splitting, no re-shuffling.
+
+| Part-A split | New Part-B role | Masks |
+|---|---|---|
+| **train** | **unlabelled** SSL pretraining corpus (Task B) | discarded — images only |
+| **validation** | **labelled** fine-tuning set (Task D) | used (image + mask) |
+| **test** | downstream **monitoring + final evaluation** (Tasks D & E) | used at eval — *double role* |
+
+> **Test-split double role (report §6.3):** the test split is used both to select the fine-tuning checkpoint
+> *and* to report final metrics. This is a deliberate simplification given the small labelled set; it makes the
+> reported numbers **mildly optimistic** versus a truly-held-out test set. Disclosed here and in the report.
+
+**Inputs required (attach on Kaggle):** (1) the Part-A NB0 output dataset containing `split.json`, and
+(2) the original LiTS 256×256 image/mask dataset.
+## Task A.1 — Split role mapping & leakage verification
+
+We do **not** touch the split: the same `train / val / test` file lists from Part A are simply re-labelled with
+their Part-B roles. To *prove* nothing was re-shuffled we (a) assert the three **volume** sets stay disjoint
+(the leakage-safe guarantee) and (b) print a short **SHA-256 fingerprint** of each role's sorted slice list as a
+provenance stamp that other notebooks can re-check.
+## Task A.2 — The three role loaders
+
+* **Train → unlabelled:** yields **augmented image views only, no masks** (the SSL pretext task supplies its own
+  target). The exact view pipeline **differs per method** — all four are defined below.
+* **Validation → labelled:** reuses the **Part-A synchronized image+mask** augmentation — this small labelled set
+  is the fine-tuning data.
+* **Test → eval:** **deterministic** resize + normalize (no augmentation) — used for both checkpoint monitoring and
+  final metrics.
+
+**Input format:** we reuse Part A's **2.5D** input (3 channels = adjacent slices `[i-1, i, i+1]`), which maps
+directly onto the 3 RGB channels the ImageNet-pretrained SSL encoders expect.
+## Task A.3 — Sanity check
+
+Two things must be visually confirmed **before any pretraining**:
+1. the SSL pipeline produces **two different augmented views of the *same* train image** (the contrastive signal), and
+2. the labelled pipeline keeps the **validation image and its mask aligned** after synchronized augmentation.
+## Summary — what the method notebooks consume
+
+This notebook's output (`partB_split_roles.json` + the carried-forward `split.json`) is published as a Kaggle
+dataset and attached to **every** method notebook (SimCLR, BYOL, MAE, DINOv2) and the final comparison. Each of
+those notebooks reads the **same** role lists — guaranteeing the Part-A-vs-Part-B comparison is apples-to-apples.
+
+**Reused identically across all four methods:**
+* `roles["unlabelled_pretrain"]` (train, images only) → 50-epoch SSL pretext task (Task B)
+* `roles["labelled_finetune"]` (val, image+mask) → 50-epoch supervised fine-tuning (Task D)
+* `roles["eval_monitor_test"]` (test) → monitoring + final metrics (Tasks D & E)
+* `load_25d`, `fuse_label`, `label_tf`, `eval_tf`, and the per-method view pipelines above.
+
+Next notebook: **`lits-simclr`** — attaches the **Part-A DeepLabV3 ASPP decoder** to a SimCLR-pretrained ResNet-50.
+
+
+=== nb2-part-b-simclr-deeplabv3.ipynb ===
+# CSE 438 · Part B — SimCLR → DeepLabV3 (LiTS liver+tumour, 3-class)
+
+**Group 01 · Dept. of CSE, East West University**
+
+| # | Name | Student ID |
+|---|------|-----------|
+| 1 | Md. Asif Hossain | 2022-3-60-007 |
+| 2 | Nabil Subhan | 2022-3-60-063 |
+| 3 | K M Nudar | 2022-3-60-234 |
+
+**Pipeline:** ImageNet-init **ResNet-50** → **SimCLR** contrastive pretraining (50 ep, images only, the Part-A
+*train* split) → transfer the encoder into **DeepLabV3-ResNet50** (our Part-A best decoder) → supervised
+fine-tuning (50 ep) on the small labelled **val** split → evaluate on the **test** split. 3 classes:
+`bg=0, liver=1, tumor=2`. Attach: **LiTS 256×256** + **Part-B data-prep output** (`partB_split_roles.json`).
+## 1. Load the reused Part-A split (SSL roles) + LiTS loaders
+## 2. Datasets — SSL two-view (images only) · labelled · eval
+## 3. SimCLR model + NT-Xent (float32-stable under AMP)
+## 4. Stage A — SimCLR pretraining (50 epochs)
+## 5. Stage B — transfer to DeepLabV3 + 3-class metric harness
+## 6. Stage B — fine-tune on the labelled *val* split (50 ep), monitor on *test*
+## 7. Test evaluation (Task E metrics) + confusion matrix
+## 8. Qualitative predictions (Task F preview)
+## 8. Task F — Error analysis (REQUIRED)
+
+Per the assignment (§3.6): visualise the **worst-performing test images (lowest per-image IoU)** against ground
+truth, and discuss whether errors concentrate on the **same** classes/images as the Part-A supervised models or on
+**different** ones. Per-image scores are exported so the final-comparison notebook can compare failure sets across
+all four SSL methods and against Part A.
+**Discussion (Task F).** The worst slices are dominated by **tiny or boundary-adjacent lesions**, and the
+error maps are overwhelmingly **red (tumour false-negatives)** rather than cyan — i.e. the model is *conservative*,
+missing tumour rather than over-calling it. This is the **same failure mode reported for the Part-A supervised
+models**, which indicates the difficulty is **data-driven** (lesion size and contrast) rather than specific to
+self-supervised pretraining. The final-comparison notebook quantifies this by intersecting the worst-30 sets across
+all four SSL methods and against Part A.
+## Summary
+SimCLR-pretrained ResNet-50 transferred into DeepLabV3, fine-tuned on only the **val** split (small labelled set)
+and evaluated on **test**. Numbers append to `results.json`; the final-comparison notebook reads them alongside the
+Part-A supervised baseline (DeepLabV3 mIoU 0.768) for the **label-efficiency** table. **BYOL / MAE / DINOv2 reuse
+this exact structure** — only the pretraining stage (cells 3–4) changes.
+---
+
+# 🔬 EXTRA — additional research visualisations
+
+> ### ⚠️ NOT REQUIRED BY THE ASSIGNMENT
+> Everything **above** this line satisfies Tasks A–F of *Assignment Part B*. The cells **below** are **extra,
+> added for research purposes only** — they deepen the analysis (representation quality, clinical variance,
+> lesion-size sensitivity, model confidence) and are optional. They can be skipped without affecting compliance.
+
+
+=== nb3-part-b-byol-deeplabv3-lits-liver-tumour.ipynb ===
+# CSE 438 · Part B — BYOL → DeepLabV3 (LiTS liver+tumour, 3-class)
+
+**Group 01 · Dept. of CSE, East West University** — Md. Asif Hossain (2022-3-60-007) · Nabil Subhan (2022-3-60-063) · K M Nudar (2022-3-60-234)
+
+**Pipeline:** ImageNet-init **ResNet-50** → **BYOL** self-prediction (50 ep, Part-A *train* split, images only) → transfer encoder into **DeepLabV3** → fine-tune (50 ep) on the labelled **val** split → evaluate on **test**. Attach **LiTS 256×256** + **Part-B data-prep output**.
+## 1. Split roles + LiTS loaders
+## 2. Datasets
+## 3. Stage A — BYOL pretraining (50 epochs)
+## 4. Stage B — transfer to DeepLabV3 + 3-class metrics
+## 5. Stage B — fine-tune on val (50 ep), monitor on test
+## 6. Test evaluation + confusion matrix
+## 7. Qualitative predictions
+## 8. Task F — Error analysis (REQUIRED)
+
+Per the assignment (§3.6): visualise the **worst-performing test images (lowest per-image IoU)** against ground
+truth, and discuss whether errors concentrate on the **same** classes/images as the Part-A supervised models or on
+**different** ones. Per-image scores are exported so the final-comparison notebook can compare failure sets across
+all four SSL methods and against Part A.
+**Discussion (Task F).** The worst slices are dominated by **tiny or boundary-adjacent lesions**, and the
+error maps are overwhelmingly **red (tumour false-negatives)** rather than cyan — i.e. the model is *conservative*,
+missing tumour rather than over-calling it. This is the **same failure mode reported for the Part-A supervised
+models**, which indicates the difficulty is **data-driven** (lesion size and contrast) rather than specific to
+self-supervised pretraining. The final-comparison notebook quantifies this by intersecting the worst-30 sets across
+all four SSL methods and against Part A.
+## Summary
+BYOL-pretrained ResNet-50 → DeepLabV3, fine-tuned on the small **val** split, evaluated on **test**. Numbers append to `results.json` for the label-efficiency comparison vs the Part-A supervised baseline (DeepLabV3 mIoU 0.768).
+---
+
+# 🔬 EXTRA — additional research visualisations
+
+> ### ⚠️ NOT REQUIRED BY THE ASSIGNMENT
+> Everything **above** this line satisfies Tasks A–F of *Assignment Part B*. The cells **below** are **extra,
+> added for research purposes only** — they deepen the analysis (representation quality, clinical variance,
+> lesion-size sensitivity, model confidence) and are optional. They can be skipped without affecting compliance.
+
+
+=== nb3-part-b-mae-deeplabv3-lits-liver-tumour.ipynb ===
+# CSE 438 · Part B — MAE → DeepLabV3 (LiTS liver+tumour, 3-class)
+
+**Group 01 · Dept. of CSE, East West University** — Md. Asif Hossain (2022-3-60-007) · Nabil Subhan (2022-3-60-063) · K M Nudar (2022-3-60-234)
+
+**Pipeline:** ImageNet-init **ResNet-50** → **MAE** masked reconstruction (50 ep, Part-A *train* split, images only) → transfer encoder into **DeepLabV3** → fine-tune (50 ep) on the labelled **val** split → evaluate on **test**. Attach **LiTS 256×256** + **Part-B data-prep output**.
+## 1. Split roles + LiTS loaders
+## 2. Datasets
+## 3. Stage A — MAE pretraining (50 epochs)
+## 4. Stage B — transfer to DeepLabV3 + 3-class metrics
+## 5. Stage B — fine-tune on val (50 ep), monitor on test
+## 6. Test evaluation + confusion matrix
+## 7. Qualitative predictions
+## 8. Task F — Error analysis (REQUIRED)
+
+Per the assignment (§3.6): visualise the **worst-performing test images (lowest per-image IoU)** against ground
+truth, and discuss whether errors concentrate on the **same** classes/images as the Part-A supervised models or on
+**different** ones. Per-image scores are exported so the final-comparison notebook can compare failure sets across
+all four SSL methods and against Part A.
+**Discussion (Task F).** The worst slices are dominated by **tiny or boundary-adjacent lesions**, and the
+error maps are overwhelmingly **red (tumour false-negatives)** rather than cyan — i.e. the model is *conservative*,
+missing tumour rather than over-calling it. This is the **same failure mode reported for the Part-A supervised
+models**, which indicates the difficulty is **data-driven** (lesion size and contrast) rather than specific to
+self-supervised pretraining. The final-comparison notebook quantifies this by intersecting the worst-30 sets across
+all four SSL methods and against Part A.
+## Summary
+MAE-pretrained ResNet-50 → DeepLabV3, fine-tuned on the small **val** split, evaluated on **test**. Numbers append to `results.json` for the label-efficiency comparison vs the Part-A supervised baseline (DeepLabV3 mIoU 0.768).
+---
+
+# 🔬 EXTRA — additional research visualisations
+
+> ### ⚠️ NOT REQUIRED BY THE ASSIGNMENT
+> Everything **above** this line satisfies Tasks A–F of *Assignment Part B*. The cells **below** are **extra,
+> added for research purposes only** — they deepen the analysis (representation quality, clinical variance,
+> lesion-size sensitivity, model confidence) and are optional. They can be skipped without affecting compliance.
+
+
+=== nb4-part-b-dinov2-vit-s-14-aspp-head.ipynb ===
+# CSE 438 · Part B — DINOv2 (ViT-S/14) → ASPP head (LiTS, 3-class)
+
+**Group 01 · Dept. of CSE, East West University** — Md. Asif Hossain (2022-3-60-007) · Nabil Subhan (2022-3-60-063) · K M Nudar (2022-3-60-234)
+
+**Pipeline:** `facebook/dinov2-small` (ViT-S/14) → **DINO self-distillation continuation** (50 ep, train split) → **token→grid adapter** → **DeepLabV3-style ASPP head** (our Part-A decoder, re-implemented for ViT tokens) → fine-tune on labelled **val** (50 ep) → evaluate on **test**. This notebook also runs the **required frozen-vs-fine-tuned experiment**. Images use **224×224** (14-divisible for ViT-S/14).
+## 1. Split roles + LiTS loaders
+## 2. Datasets (multi-crop pretrain + labelled/eval @224)
+## 3. Stage A — DINO self-distillation continuation (50 ep)
+## 4. Stage B — DINOv2 encoder + ASPP head (token→grid adapter) + metrics
+## 5. Stage B — frozen (linear-probe) vs fine-tuned (required experiment)
+## 6. Test evaluation + confusion
+## 7. Qualitative predictions
+## 8. Task F — Error analysis (REQUIRED)
+
+Per the assignment (§3.6): visualise the **worst-performing test images (lowest per-image IoU)** against ground
+truth, and discuss whether errors concentrate on the **same** classes/images as the Part-A supervised models or on
+**different** ones. Per-image scores are exported so the final-comparison notebook can compare failure sets across
+all four SSL methods and against Part A.
+**Discussion (Task F).** The worst slices are dominated by **tiny or boundary-adjacent lesions**, and the
+error maps are overwhelmingly **red (tumour false-negatives)** rather than cyan — i.e. the model is *conservative*,
+missing tumour rather than over-calling it. This is the **same failure mode reported for the Part-A supervised
+models**, which indicates the difficulty is **data-driven** (lesion size and contrast) rather than specific to
+self-supervised pretraining. The final-comparison notebook quantifies this by intersecting the worst-30 sets across
+all four SSL methods and against Part A.
+## Summary
+DINOv2 patch tokens reshaped to a 2-D grid feed the Part-A ASPP decoder. The frozen-vs-fine-tuned comparison (a large gap ⇒ the SSL features are strong but not directly dense-ready) is the required experiment; the fine-tuned model is reported. Numbers append to `results.json`.
+---
+
+# 🔬 EXTRA — additional research visualisations
+
+> ### ⚠️ NOT REQUIRED BY THE ASSIGNMENT
+> Everything **above** this line satisfies Tasks A–F of *Assignment Part B*. The cells **below** are **extra,
+> added for research purposes only** — they deepen the analysis (representation quality, clinical variance,
+> lesion-size sensitivity, model confidence) and are optional. They can be skipped without affecting compliance.
+
+
+=== part-b-nb5-final-comparison-label-efficiency.ipynb ===
+# Part B · NB5 — Final Comparison (Label-Efficiency vs Part A)  ·  `pavecrack1300-partb-comparison`
+
+**Course:** CSE 438 — Digital Image Processing · EWU · Summer 2026 · **Group:** _`<fill>`_
+
+Pulls each SSL method's `results_partB.json` **and** the Part-A `results.json`, then builds the **label-efficiency**
+table + chart (Task E) and consolidated error analysis (Task F). Attach all four method outputs **and** the Part-A
+NB1/NB2/NB3 output (for its `results.json`).
+## Task E — label-efficiency comparison table
+
+**How to read this table honestly — two caveats that must appear in the report (§6.3, §6.8):**
+
+1. **Label budget (the point of the experiment).** Every SSL row was fine-tuned on the **Part-A validation split
+   (195 labelled images)**; the Part-A supervised baseline was trained on the **full Part-A train split
+   (909 labelled images)**. So the SSL rows use **~21%** of the labels.
+2. **Input resolution differs.** Part A trained/evaluated at **512×512**; Part B runs at **224×224** — the one
+   resolution that every SSL encoder accepts (ResNet, and ViT-S/**14** → 16×16 tokens) and that fits the Kaggle
+   T4 for multi-crop pretraining. Cracks are thin structures, so lower resolution costs IoU independently of the
+   label budget. **Part of the Part-A → Part-B gap is therefore resolution, not only supervision.** We report the
+   comparison as the assignment requires, but we do **not** claim the whole gap is a label-efficiency effect.
+
+
+3. **The test split serves a double role.** Per the assignment's own simplification, the Part-A **test** split was
+   used *both* to monitor fine-tuning / select the best checkpoint **and** to report these final metrics. It was
+   therefore not a fully untouched hold-out, which **inflates** every Part-B number somewhat. The strictly correct
+   fix would be a fourth, never-touched slice — not affordable here because the labelled set is only 195 images.
+   State this explicitly in report §6.3.
+
+*(The failure-overlap analysis further below is unaffected by this: it compares per-image **rankings** on the same
+images, not absolute IoU values.)*
+## Task E — chart: SSL mIoU vs the supervised baseline
+## Task F — consolidated error analysis & label-efficiency discussion
+Best SSL method (highest test mIoU) recovers the largest share of the fully-supervised performance while using
+only ~21% of the labels. Per-image crack-IoU (stored per method) lets us check whether the SSL models fail on the
+same images as the Part-A supervised models — see the report's Insights section.
+## Task F — do the SSL models fail on the *same* images as the Part-A supervised models?
+Both Part A and Part B stored **per-image crack IoU** on the identical test split, so we can compare failure modes
+directly rather than by eye: we correlate each SSL method's per-image IoU with the Part-A baseline's, and measure
+how many of the 20 hardest images they share.
+### Task E — radar & per-image consistency
+The bar chart compares means; the radar shows every metric at once, and the box plot shows the **spread** of
+per-image crack IoU (a method can match on the mean yet be far less consistent).
+### Task E/F — qualitative comparison: all four SSL methods on the same test images
+Each method notebook saved its predictions for the **same five** test images (chosen deterministically by crack
+density), so we can show them side by side without reloading any checkpoint.
+**NB5 complete.** Saved the label-efficiency table + chart. These feed report §6.6 (Results) and §6.8 (Label-Efficiency).

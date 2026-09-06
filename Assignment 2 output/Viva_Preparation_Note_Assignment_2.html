@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<title>Viva Preparation Note - Assignment 2 (Part B)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;700&display=swap');
+  
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: 'Noto Sans Bengali', 'Segoe UI', sans-serif;
+    background: #fff;
+    color: #1a1a1a;
+    line-height: 1.7;
+    padding: 40px 60px;
+    font-size: 14px;
+  }
+  
+  h1 {
+    color: #1e50b4;
+    font-size: 26px;
+    margin-bottom: 8px;
+    border-bottom: 3px solid #1e50b4;
+    padding-bottom: 8px;
+  }
+  
+  h2 {
+    color: #1e50b4;
+    font-size: 20px;
+    margin-top: 30px;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 5px;
+  }
+  
+  h3 {
+    color: #333;
+    font-size: 16px;
+    margin-top: 18px;
+    margin-bottom: 6px;
+  }
+  
+  p {
+    margin-bottom: 10px;
+  }
+  
+  ul, ol {
+    margin-left: 20px;
+    margin-bottom: 12px;
+  }
+  
+  li {
+    margin-bottom: 4px;
+  }
+  
+  strong {
+    color: #1a1a1a;
+  }
+  
+  code {
+    background: #f0f0f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  
+  blockquote {
+    border-left: 4px solid #1e50b4;
+    background: #eef4ff;
+    padding: 12px 16px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  
+  blockquote p {
+    margin: 4px 0;
+  }
+  
+  hr {
+    border: none;
+    border-top: 2px solid #ddd;
+    margin: 25px 0;
+  }
+  
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 15px 0;
+  }
+  
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  
+  th {
+    background: #1e50b4;
+    color: white;
+    font-weight: 700;
+  }
+  
+  tr:nth-child(even) {
+    background: #f5f9ff;
+  }
+  
+  @media print {
+    body {
+      padding: 20px 40px;
+      font-size: 12px;
+    }
+    h1 { font-size: 22px; }
+    h2 { font-size: 17px; page-break-after: avoid; }
+    h3 { font-size: 14px; page-break-after: avoid; }
+    blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<h1 id="viva-preparation-note-assignment-2-part-b">🎓 Viva Preparation Note: Assignment 2 (Part B)</h1>
+
+<p><strong>Self-Supervised Learning (SSL) for Liver and Tumor Segmentation</strong></p>
+
+<p>এই নোটটি অ্যাসাইনমেন্ট ২ (Part B) এর উপর ভিত্তি করে তৈরি করা হয়েছে, যাতে আপনি ভাইভার জন্য পুরোপুরি প্রস্তুত হতে পারেন। এতে প্রতিটি নোটবুকের মূল কনসেপ্ট, কাজ এবং সম্ভাব্য ভাইভা প্রশ্নগুলো সহজ বাংলায় আলোচনা করা হয়েছে।</p>
+
+<hr />
+
+<h2 id="মল-উদদশয-core-concept">📌 মূল উদ্দেশ্য (Core Concept)</h2>
+
+<p>Part A-তে আমরা <strong>Supervised Learning</strong> করেছিলাম, যেখানে প্রচুর লেবেলড ডেটা (909 images) ব্যবহার করে মডেল ট্রেইন করা হয়েছিল। 
+কিন্তু Part B-এর মূল উদ্দেশ্য হলো <strong>Self-Supervised Learning (SSL)</strong> ব্যবহার করা। এখানে আমরা মডেলকে প্রথমে আনলেবেলড ডেটা দিয়ে একা একা শিখতে দিই (Pre-training), এবং পরে খুব সামান্য লেবেলড ডেটা (195 images) দিয়ে ফাইন-টিউন করি। এর মাধ্যমে আমরা <strong>Label Efficiency</strong> অর্জন করতে চাই।</p>
+
+<hr />
+
+<h2 id="notebook-1-data-preparation-nb1-lits-ssl-data-prepipynb">📓 Notebook 1: Data Preparation (<code>nb1-lits-ssl-data-prep.ipynb</code>)</h2>
+
+<p>এই নোটবুকটি পরবর্তী সব নোটবুকের জন্য ডেটা প্রস্তুত করে।</p>
+
+<h3 id="মল-কজসমহ">মূল কাজসমূহ:</h3>
+
+<ol>
+<li><strong>Role Mapping:</strong> 전체 ডেটাসেটকে ৩টি ভাগে ভাগ করা হয়:
+<ul>
+<li><code>unlabelled_pretrain</code> (SSL প্রি-ট্রেনিংয়ের জন্য, লেবেল ছাড়া)</li>
+<li><code>labelled_finetune</code> (DeepLabV3 ফাইন-টিউনিংয়ের জন্য, মাস্ক সহ)</li>
+<li><code>eval_monitor_test</code> (ফাইনাল রেজাল্ট দেখার জন্য)</li>
+</ul></li>
+<li><strong>2.5D Approach:</strong> মডেলকে 3D ভলিউমের জ্ঞান দেওয়ার জন্য একটি স্লাইসের সাথে তার আগের ও পরের স্লাইস জোড়া দিয়ে RGB চ্যানেলে (i-1, i, i+1) ইনপুট দেওয়া হয়। এতে 2D মডেল (যেমন ResNet) দিয়ে 3D এর মত পারফরম্যান্স পাওয়া যায়।</li>
+<li><strong>Data Leakage Prevention:</strong> একজন রোগীর (Patient/Volume) স্লাইস যেন একই সাথে ট্রেইন এবং টেস্ট সেটে না যায়, তা নিশ্চিত করতে Python-এর <code>set intersection</code> ব্যবহার করে ভলিউম আইডিগুলো চেক করা হয়। </li>
+<li><strong>Hashing (<code>hashlib.sha256</code>):</strong> ডেটাসেটের ফাইলগুলো ঠিকঠাক আছে কিনা এবং কেউ ম্যানিপুলেট করেছে কিনা তা বোঝার জন্য ফাইলগুলোর একটি ইউনিক 'Fingerprint' (hexdigest) তৈরি করা হয়।</li>
+<li><strong>Sanity Check:</strong> ডেটা এবং মাস্ক ঠিকমতো এলাইন (Align) হয়েছে কিনা তা চোখে দেখে যাচাই করা হয়।</li>
+</ol>
+
+<hr />
+
+<h2 id="notebook-2-simclr-nb2-part-b-simclr-deeplabv3ipynb">📓 Notebook 2: SimCLR (<code>nb2-part-b-simclr-deeplabv3.ipynb</code>)</h2>
+
+<p>SimCLR হলো একটি Contrastive Learning মেথড।</p>
+
+<h3 id="ওযরকফল">ওয়ার্কফ্লো:</h3>
+
+<ol>
+<li><strong>Pre-training:</strong> ResNet-50 মডেল ব্যবহার করে আনলেবেলড ডেটায় প্রি-ট্রেনিং করা হয়।</li>
+<li><strong>NT-Xent Loss:</strong> এই লস ফাংশনের কাজ হলো একই ইমেজের দুটি অগমেন্টেড ভিউকে (positive pair) কাছাকাছি আনা এবং অন্য সব ইমেজের ভিউগুলোকে (negative pair) দূরে ঠেলে দেওয়া।</li>
+<li><strong>Projection Head:</strong> ResNet এর শেষে একটি ছোট নেটওয়ার্ক (Linear -> ReLU) বসানো হয়, যা শুধু প্রি-ট্রেনিংয়ের সময় লস কমানোর জন্য ব্যবহার করা হয়। ফাইন-টিউনিংয়ের সময় এটি ফেলে দেওয়া হয়।</li>
+<li><strong>Fine-Tuning:</strong> ট্রেইন করা ResNet-50 কে <strong>DeepLabV3</strong> এর ব্যাকবোন হিসেবে বসিয়ে লেবেলড ডেটায় ফাইন-টিউন করা হয়।</li>
+</ol>
+
+<blockquote>
+  <p>[!TIP]
+  <strong>ভাইভা প্রশ্ন:</strong> SimCLR-এ Projection Head কেন লাগে?
+  <strong>উত্তর:</strong> সরাসরি ফিচার থেকে লস ক্যালকুলেট করার চেয়ে ফিচারের ডাইমেনশন কমিয়ে Projection Head দিয়ে লস ক্যালকুলেট করলে মডেল ভালো Representation শিখতে পারে।</p>
+</blockquote>
+
+<hr />
+
+<h2 id="notebook-3-byol-nb3-part-b-byol-deeplabv3ipynb">📓 Notebook 3: BYOL (<code>nb3-part-b-byol-deeplabv3.ipynb</code>)</h2>
+
+<p>BYOL (Bootstrap Your Own Latent) SimCLR-এর একটি উন্নত রূপ।</p>
+
+<h3 id="পরথকয-ও-বশষটয">পার্থক্য ও বৈশিষ্ট্য:</h3>
+
+<ol>
+<li><strong>No Negative Samples:</strong> SimCLR-এ ব্যাচের অন্যান্য ইমেজগুলোকে নেগেটিভ স্যাম্পল হিসেবে দূরে ঠেলে দেওয়া হয়। কিন্তু BYOL-এ কোনো নেগেটিভ স্যাম্পল লাগে না!</li>
+<li><strong>Online &amp; Target Network:</strong> এতে একই সাথে দুটি মডেল থাকে। 
+<ul>
+<li><em>Online Network:</em> গ্রেডিয়েন্ট ডিসেন্ট দিয়ে আপডেট হয়।</li>
+<li><em>Target Network:</em> গ্রেডিয়েন্ট দিয়ে আপডেট হয় না। বরং Online Network এর weights গুলোকে একটু একটু করে (EMA - Exponential Moving Average দিয়ে) এর ভেতরে কপি করা হয়। </li>
+</ul></li>
+<li><strong>লজিক:</strong> Online মডেলের কাজ হলো Target মডেলের আউটপুটকে প্রেডিক্ট করা।</li>
+</ol>
+
+<blockquote>
+  <p>[!IMPORTANT]
+  <strong>ভাইভা প্রশ্ন:</strong> BYOL এবং SimCLR এর প্রধান পার্থক্য কী?
+  <strong>উত্তর:</strong> SimCLR এ negative pairs লাগে, কিন্তু BYOL এ লাগে না। BYOL এ মডেল কোলাপ্স ঠেকানোর জন্য একটি স্লো-মুভিং Target Network (EMA) ব্যবহার করা হয়।</p>
+</blockquote>
+
+<hr />
+
+<h2 id="notebook-4-mae-nb3-part-b-mae-deeplabv3-lits-liver-tumouripynb">📓 Notebook 4: MAE (<code>nb3-part-b-mae-deeplabv3-lits-liver-tumour.ipynb</code>)</h2>
+
+<p>MAE (Masked Autoencoder) এর কাজের ধরন Contrastive Learning থেকে সম্পূর্ণ আলাদা।</p>
+
+<h3 id="ওযরকফল-2">ওয়ার্কফ্লো:</h3>
+
+<ol>
+<li><strong>Masking:</strong> ইমেজের ৭৫% অংশ কালো করে (Mask করে) দেওয়া হয়।</li>
+<li><strong>Reconstruction:</strong> মডেলের কাজ হলো বাকি ২৫% অংশ দেখে পুরো ছবির অরিজিনাল পিক্সেলগুলো প্রেডিক্ট করা বা জোড়া দেওয়া। </li>
+<li><strong>Loss:</strong> মডেলের রিকনস্ট্রাক্ট করা ছবি এবং আসল ছবির পিক্সেলের মধ্যকার পার্থক্যই (Mean Squared Error) হলো লস।</li>
+<li><strong>Augmentation:</strong> MAE তে Color Jitter বা Blur এর মতো হার্ড অগমেন্টেশন ব্যবহার করা হয় না। কারণ ৭৫% ইমেজ মুছে ফেলাই হলো এর আসল অগমেন্টেশন!</li>
+</ol>
+
+<blockquote>
+  <p>[!NOTE]
+  <strong>ভাইভা পয়েন্ট:</strong> MAE পিক্সেল-লেভেলে রিকনস্ট্রাক্ট করতে গিয়ে লিভারের ভেতরের সূক্ষ্ম টেক্সচারগুলো খুব ভালো শিখে যায়, যা সেগমেন্টেশনে দারুণ কাজ দেয়।</p>
+</blockquote>
+
+<hr />
+
+<h2 id="notebook-5-dinov2-nb4-part-b-dinov2-vit-s-14-aspp-headipynb">📓 Notebook 5: DINOv2 (<code>nb4-part-b-dinov2-vit-s-14-aspp-head.ipynb</code>)</h2>
+
+<p>এটি এই সিরিজের সবচেয়ে অ্যাডভান্সড মডেল, যা ViT (Vision Transformer) ব্যবহার করে।</p>
+
+<h3 id="ওযরকফল-3">ওয়ার্কফ্লো:</h3>
+
+<ol>
+<li><strong>Resolution 224x224:</strong> ViT মডেল ছবিকে ১৪x১৪ পিক্সেলের প্যাচে ভাগ করে। 256 সাইজ নিলে ভাগশেষ থাকে, তাই ইমেজের সাইজ 224x224 করা হয়েছে।</li>
+<li><strong>Multi-Crop:</strong> টিচার মডেলকে ইমেজের বড় অংশ (Global crop) দেওয়া হয় কন্টেক্সট বোঝার জন্য, আর স্টুডেন্ট মডেলকে বড়+ছোট (Local crop) অংশ দিয়ে টিচারকে কপি করতে শেখানো হয় (Self-distillation)।</li>
+<li><strong>Token → Grid Adapter:</strong> ViT এর আউটপুট হলো 1D টোকেন। এগুলোকে স্কয়ার রুট করে আবার 2D গ্রিডে সাজানো হয়, যেন DeepLabV3 (ASPP) হেড তার ওপর কনভোলিউশন করতে পারে।</li>
+<li><strong>Frozen vs Fine-Tuned:</strong> ViT এনকোডারকে লক (Frozen) করে শুধু হেড ট্রেইন করা এবং পুরো মডেল আনলক করে ট্রেইন করার মধ্যে পারফরম্যান্স পার্থক্য দেখা হয়।</li>
+</ol>
+
+<hr />
+
+<h2 id="final-comparison-label-efficiency-nb5-final-comparison">📊 Final Comparison: Label Efficiency (<code>nb5-final-comparison</code>)</h2>
+
+<p>এই নোটবুকে Part A এবং Part B এর পারফরম্যান্স তুলনা করা হয়।</p>
+
+<h3 id="রজলট-ও-কনকলশন">রেজাল্ট ও কনক্লুশন:</h3>
+
+<ul>
+<li><strong>Label Budget:</strong> Part A তে ৯০৯টি লেবেলড ইমেজ (১০০%) ব্যবহার করা হয়েছিল। কিন্তু Part B তে মাত্র ১৯৫টি (২১%) লেবেলড ইমেজ ব্যবহার করা হয়েছে।</li>
+<li><strong>Resolution Gap:</strong> Part A তে রেজোলিউশন ছিল ৫১২x৫১২, আর Part B তে ২২৪x২২৪ (যার ফলে ছোট টিউমার ডিটেক্ট করা কঠিন হয়েছে)।</li>
+<li><strong>Best Models:</strong> এত প্রতিকূলতা (কম ডেটা, কম রেজোলিউশন) সত্ত্বেও <strong>DINOv2</strong> এবং <strong>MAE</strong> মডেলগুলো সুপারভাইজড বেসলাইনের প্রায় <strong>৮৩-৮৬%</strong> পারফরম্যান্স অর্জন করতে পেরেছে! </li>
+</ul>
+
+<blockquote>
+  <p>[!TIP]
+  <strong>ভাইভা প্রশ্ন:</strong> SSL এর মূল সার্থকতা কী?
+  <strong>উত্তর:</strong> অনেক বিশাল লেবেলড ডেটাসেট তৈরি করা কষ্টকর। SSL এর মাধ্যমে আমরা আনলেবেলড ডেটা দিয়ে মডেলকে প্রি-ট্রেইন করে, পরবর্তীতে খুব সামান্য লেবেলড ডেটা দিয়েই (Label Efficiency) ভালো রেজাল্ট পেতে পারি, যা এই অ্যাসাইনমেন্টে প্রমাণিত হয়েছে। </p>
+</blockquote>
+
+<hr />
+
+<p><em>Wish you all the best for your Viva!</em> 🚀</p>
+
+</body>
+</html>
