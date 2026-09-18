@@ -1,0 +1,410 @@
+%=======================================================================
+%  CSE 348/438 — Digital Image Processing · Research project
+%  Single-image dehazing via the Dark Channel Prior: stage attribution,
+%  density stratification and failure analysis, with a learned reference.
+%
+%  Every number comes from the Kaggle run:
+%    numbers.tex          <- written by  dehaze-ablation-eval   (NB 2)
+%    numbers_learned.tex  <- written by  dehaze-learned-reference (NB 3)
+%    figures/*.pdf        <- fig_*.pdf from NB 1–3's /kaggle/working
+%  Copy those files next to this .tex and compile with pdflatex.
+%  Macros fall back to "??" so the document always compiles; a "??" in the
+%  PDF means that number has not been generated yet.
+%
+%  Sections marked  %% AUTHORS  are the interpretation (Insights, parts of
+%  Discussion/Conclusion) and are to be written by the group, not generated.
+%=======================================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\graphicspath{{figures/}}
+
+\InputIfFileExists{numbers.tex}{}{}
+\InputIfFileExists{numbers_learned.tex}{}{}
+% ---- fallbacks (only used when the run has not produced the macro) ----
+\makeatletter
+\newcommand{\fb}[1]{\@ifundefined{#1}{\expandafter\newcommand\csname #1\endcsname{??}}{}}
+\makeatother
+\fb{nImages}\fb{nTune}\fb{nTest}\fb{nDatasets}\fb{dataSource}\fb{splitFingerprint}\fb{densityLight}\fb{densityDense}
+\fb{inputPSNR}\fb{inputSSIM}\fb{clahePSNR}\fb{claheSSIM}\fb{basePSNR}\fb{baseSSIM}\fb{baseCIEDE}\fb{tunedPSNR}\fb{tunedSSIM}\fb{tunedCIEDE}
+\fb{tunedDelta}\fb{tunedDeltaLo}\fb{tunedDeltaHi}\fb{tunedDeltaP}\fb{baseGain}\fb{tunedGain}\fb{tunedCfg}
+\fb{impTop}\fb{impTopVal}\fb{impSecond}\fb{impSecondVal}\fb{impRefine}\fb{impPatch}\fb{impOmega}\fb{impTzero}\fb{impAmethod}\fb{impGfr}\fb{impGfeps}
+\fb{refineDelta}\fb{refineNoneDelta}\fb{refineNoneLo}\fb{refineNoneHi}\fb{refineNoneP}
+\fb{mattingN}\fb{mattingDelta}\fb{mattingLo}\fb{mattingHi}\fb{mattingP}\fb{mattingMs}\fb{guidedMs}
+\fb{gainLight}\fb{gainMedium}\fb{gainDense}\fb{rhoDensity}\fb{pDensity}\fb{kruskalP}\fb{refLight}\fb{refMedium}\fb{refDense}
+\fb{nBright}\fb{rhoBright}\fb{pBright}\fb{ratioBrightest}\fb{ratioDcptop}\fb{ratioDcptopmean}\fb{ratioQuadtree}
+\fb{aodRoute}\fb{nTestLearned}
+\fb{finInputPSNR}\fb{finInputSSIM}\fb{finInputCIEDE}\fb{finInputE}\fb{finInputR}\fb{finInputMs}
+\fb{finClahePSNR}\fb{finClaheSSIM}\fb{finClaheCIEDE}\fb{finClaheE}\fb{finClaheR}\fb{finClaheMs}\fb{finClaheDelta}\fb{finClaheLo}\fb{finClaheHi}\fb{finClaheP}
+\fb{finBasePSNR}\fb{finBaseSSIM}\fb{finBaseCIEDE}\fb{finBaseE}\fb{finBaseR}\fb{finBaseMs}\fb{finBaseDelta}\fb{finBaseLo}\fb{finBaseHi}\fb{finBaseP}
+\fb{finTunedPSNR}\fb{finTunedSSIM}\fb{finTunedCIEDE}\fb{finTunedE}\fb{finTunedR}\fb{finTunedMs}
+\fb{finAodPSNR}\fb{finAodSSIM}\fb{finAodCIEDE}\fb{finAodE}\fb{finAodR}\fb{finAodMs}\fb{finAodDelta}\fb{finAodLo}\fb{finAodHi}\fb{finAodP}
+\fb{gapRho}\fb{gapP}\fb{gapLight}\fb{gapMedium}\fb{gapDense}\fb{winsLight}\fb{winsMedium}\fb{winsDense}
+
+\newcommand{\best}[1]{\textbf{#1}}
+\setlength{\textfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
+\setlength{\dbltextfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{0pt}
+
+\begin{document}
+
+\title{Which Stage of the Dark Channel Prior Matters?\\
+A Stage-Attribution, Density-Stratified and Failure Study of Classical Single-Image Dehazing with a Learned Reference}
+
+\author{
+\IEEEauthorblockN{Md.\ Asif Hossain \quad Nabil Subhan \quad K M Nudar}
+\IEEEauthorblockA{Department of Computer Science and Engineering, East West University, Dhaka, Bangladesh\\
+\{2022-3-60-007, 2022-3-60-063, 2022-3-60-234\}@std.ewubd.edu}
+}
+\maketitle
+
+\begin{abstract}
+The dark channel prior (DCP) remains the reference classical method for single-image dehazing, yet its five stages---dark
+channel, atmospheric light, transmission estimate, transmission refinement and radiance recovery---are usually tuned as a
+whole and reported as one number. We ask which stage actually governs restoration quality, how each stage's contribution
+changes with haze density, and where the method fails. Using a from-scratch implementation with three atmospheric-light
+estimators and three refinement operators (none, guided filter, matting Laplacian), we run a one-factor-at-a-time ablation
+over \nImages{} paired hazy/clear images from \nDatasets{} benchmarks, choosing hyper-parameters on a scene-grouped tuning
+split (\nTune{} images) and reporting on a disjoint test split (\nTest{} images) with paired bootstrap confidence intervals.
+On the test split the baseline DCP raises PSNR from \inputPSNR{} to \basePSNR{}\,dB and the tuned configuration to
+\tunedPSNR{}\,dB (paired $\Delta$ vs.\ baseline $\tunedDelta$\,dB, 95\,\% CI [\tunedDeltaLo, \tunedDeltaHi]). The stage with
+the largest influence is \impTop{} (\impTopVal{}\,dB spread across its levels), followed by \impSecond{} (\impSecondVal{}\,dB);
+removing transmission refinement costs \refineNoneDelta{}\,dB. DCP's gain over the input is \gainLight{}, \gainMedium{} and
+\gainDense{}\,dB in the light, medium and dense strata (Spearman $\rho$ between density and gain $=\rhoDensity$), and
+errors concentrate in intrinsically bright regions. A learned reference (AOD-Net) evaluated on the identical test images
+reaches \finAodPSNR{}\,dB, with a learned-minus-classical gap of \gapLight{}, \gapMedium{} and \gapDense{}\,dB across the
+three density strata. Code, split fingerprints and per-image scores are released for reproducibility.
+\end{abstract}
+
+\begin{IEEEkeywords}
+image dehazing, dark channel prior, guided filter, ablation study, image restoration, haze density
+\end{IEEEkeywords}
+
+%=========================== I ==========================================
+\section{Introduction}
+Haze attenuates scene radiance and adds a veil of scattered airlight, reducing contrast and colour fidelity. Under the
+standard optical model~\cite{narasimhan2002}
+\begin{equation}
+  I(x) = J(x)\,t(x) + A\,\bigl(1 - t(x)\bigr),\qquad t(x) = e^{-\beta d(x)},
+  \label{eq:model}
+\end{equation}
+recovering the clear radiance $J$ from a single observation $I$ requires estimating both the atmospheric light $A$ and the
+transmission $t$, an ill-posed problem that every method resolves with a prior. The dark channel prior of He, Sun and
+Tang~\cite{he2009,he2011} observes that in most haze-free outdoor patches at least one colour channel is close to zero,
+which turns~\eqref{eq:model} into a closed-form estimate of $t$ and $A$. Fifteen years on, DCP is still the baseline
+against which learned dehazers~\cite{cai2016,ren2016,li2017,qin2020,song2023} are compared, and it remains attractive
+wherever training data, GPUs or interpretability are constrained.
+
+DCP is not one operator but a pipeline of five, each with its own hyper-parameters (patch size $\Omega$, haze-retention
+factor $\omega$, transmission floor $t_0$, the $A$-estimator, and the refinement operator). Published comparisons report the
+pipeline as a single number, so it is not known \emph{which stage} carries the result, whether that answer changes with
+haze density, or how much of the documented sky/bright-region failure is attributable to $A$. This paper answers those
+questions with a controlled, statistically reported study. Our contributions are:
+\begin{enumerate}
+  \item A from-scratch DCP implementation whose every stage is independently ablatable, with three $A$-estimators and three
+        refinement operators including the original matting-Laplacian refinement.
+  \item A leakage-safe evaluation protocol: scene-grouped tune/test split, one-factor-at-a-time ablation, paired bootstrap
+        CIs and Wilcoxon tests on the same images, across synthetic and real benchmarks.
+  \item Stage attribution (H1), a bright-region failure analysis per $A$-estimator (H2), and density-stratified gains with a
+        refinement$\times$density cross-cut (H3), for DCP alone and against a learned reference on identical images.
+\end{enumerate}
+
+%=========================== II =========================================
+\section{Related Work}
+\textbf{Prior-based dehazing.} Fattal~\cite{fattal2008} assumed local decorrelation of surface shading and transmission;
+Tan~\cite{tan2008} maximised local contrast; He \emph{et al.}~\cite{he2009,he2011} introduced the dark channel prior and
+refined the transmission with the closed-form matting Laplacian of Levin \emph{et al.}~\cite{levin2008}, later replaced by
+the $O(N)$ guided filter~\cite{he2010}. Subsequent priors include the colour-attenuation prior~\cite{zhu2015} and the
+non-local haze-lines prior~\cite{berman2016}. Alternative $A$-estimators such as the hierarchical quad-tree
+search~\cite{kim2013} target the bright-region failure that we quantify in Section~\ref{sec:failure}.
+
+\textbf{Learned dehazing.} DehazeNet~\cite{cai2016} and MSCNN~\cite{ren2016} learned $t$ from synthetic pairs;
+AOD-Net~\cite{li2017} re-parameterised~\eqref{eq:model} into a single variable $K$ and trained an end-to-end network with
+$\sim$1.8\,k parameters; later architectures~\cite{qin2020,song2023} trade orders of magnitude more parameters for
+accuracy on synthetic benchmarks. We use AOD-Net as the reference because it shares DCP's physical model and is cheap
+enough to evaluate on the same hardware.
+
+\textbf{Benchmarks and metrics.} RESIDE~\cite{li2019} provides synthetic indoor/outdoor test sets (SOTS); the NTIRE
+challenges released real paired data: O-HAZE and I-HAZE~\cite{ancuti2018o,ancuti2018i}, Dense-Haze~\cite{ancuti2019}
+and NH-HAZE~\cite{ancuti2020}. Full-reference quality is reported with PSNR, SSIM~\cite{wang2004} and, for colour
+fidelity, CIEDE2000~\cite{sharma2005}; blind assessment uses the visible-edge descriptors of Hautière
+\emph{et al.}~\cite{hautiere2008}.
+
+%=========================== III ========================================
+\section{Method}
+\subsection{The DCP pipeline as five ablatable stages}
+For an RGB image $I\in[0,1]^{H\times W\times 3}$:
+\begin{align}
+  I^{\text{dark}}(x) &= \min_{y\in\Omega(x)}\ \min_{c\in\{r,g,b\}} I_c(y), \label{eq:dark}\\
+  \tilde t(x) &= 1 - \omega\, \min_{y\in\Omega(x)}\min_c \frac{I_c(y)}{A_c}, \label{eq:t}\\
+  t &= \mathcal{R}(\tilde t;\, I), \label{eq:refine}\\
+  J(x) &= \frac{I(x)-A}{\max\bigl(t(x),\,t_0\bigr)} + A. \label{eq:recover}
+\end{align}
+Eq.~\eqref{eq:dark} is a per-pixel channel minimum followed by a grey-level erosion with a $|\Omega|\times|\Omega|$
+structuring element. $\omega<1$ in~\eqref{eq:t} deliberately keeps a trace of haze; $t_0$ in~\eqref{eq:recover} bounds
+noise amplification where $t\to0$. The baseline values are those of~\cite{he2011}: $|\Omega|=15$, $\omega=0.95$,
+$t_0=0.1$.
+
+\subsection{Atmospheric-light estimators}
+\emph{brightest}: the maximum-intensity pixel (the naive choice that white objects hijack).
+\emph{dcp\_top}~\cite{he2011}: among the 0.1\,\% pixels with the largest dark channel, the input pixel of highest intensity.
+\emph{dcp\_top\_mean}: the mean of the same candidates (robust to a single outlier).
+\emph{quadtree}~\cite{kim2013}: recursively keep the quadrant maximising $\mathrm{mean}-\mathrm{std}$ until the region is
+smaller than 400 pixels, then take its brightest pixel.
+
+\subsection{Transmission refinement operators}
+$\mathcal{R}$ in~\eqref{eq:refine} is one of: \emph{none}; the \emph{guided filter}~\cite{he2010} with grey guide $G$,
+which fits $t = a_k G + b_k$ in every $(2r{+}1)^2$ window with ridge $\epsilon$ and averages the coefficients (four box
+filters, $O(N)$); or the \emph{matting Laplacian}~\cite{levin2008,he2009}, solving $(L+\lambda I)\,t = \lambda\tilde t$
+with $L$ built from $3\times3$ windows ($\epsilon=10^{-7}$, $\lambda=10^{-4}$) by conjugate gradients at a 320-px working
+resolution and bilinear upsampling.
+
+\subsection{Controls and learned reference}
+Two model-free controls are evaluated on the same images: the hazy input itself (\emph{do nothing}) and CLAHE on the
+$L$ channel of CIELAB (contrast enhancement without a haze model). The learned reference is AOD-Net~\cite{li2017}, five
+convolutions with multi-scale concatenation predicting $K(x)$ such that $J = K I - K + 1$. Its weights were obtained by:
+\emph{\aodRoute}. When trained here, training used only ground truths of the tuning split (test scenes never seen).
+
+%=========================== IV =========================================
+\section{Experimental Protocol}
+\label{sec:protocol}
+\textbf{Data.} \nImages{} paired images from \nDatasets{} sources (\dataSource). Images are resized so the longer side is
+$\le 512$\,px; all metrics are computed at that resolution. Table~\ref{tab:data} gives the per-dataset counts.
+
+\begin{table}[t]
+\caption{Evaluation data. Split is by \emph{scene} (all hazy renderings of a clear image share a split); fingerprint
+\texttt{\splitFingerprint}.}
+\label{tab:data}
+\centering\footnotesize
+\includegraphics[width=\columnwidth]{tab_dataset_inventory.png}
+\end{table}
+
+\textbf{Split and selection.} A seeded, scene-grouped 30\,\% tuning / 70\,\% test split is drawn per dataset (never more
+than half the scenes in tuning). Every configuration is scored on every image; hyper-parameters are \emph{selected} on
+the tuning split only and every reported number is on the test split. The split is fingerprinted (SHA-256 of the sorted
+image list) and reused byte-identically by all three notebooks.
+
+\textbf{Ablation matrix.} From the baseline, one factor is varied at a time: $|\Omega|\in\{3,7,15,31\}$;
+$A$-estimator $\in$ \{brightest, dcp\_top, dcp\_top\_mean, quadtree\}; $\omega\in\{0.80,0.90,0.95,0.99\}$;
+$t_0\in\{0.05,0.10,0.20,0.30\}$; refinement $\in$ \{none, guided\}; guided-filter $r\in\{10,20,40,80\}$ and
+$\epsilon\in\{10^{-4},10^{-3},10^{-2}\}$. The matting refinement is compared on \mattingN{} test images because of
+its cost.
+
+\textbf{Metrics.} Full-reference: PSNR, SSIM~\cite{wang2004}, mean CIEDE2000~\cite{sharma2005} (lower is better).
+No-reference: Hautière's rate of new visible edges $e$ and mean gradient ratio $\bar r$~\cite{hautiere2008}.
+Haze density is measured without reference as the mean dark channel of the input, validated against the input's PSNR
+degradation and, on synthetic data, against the true $\beta$; terciles over all images define the light
+($\le\densityLight$), medium and dense ($>\densityDense$) strata.
+
+\textbf{Statistics.} Because every configuration sees the same images, all comparisons are paired: we report the mean
+per-image difference with a 95\,\% bootstrap CI (1{,}000 resamples) and a two-sided Wilcoxon signed-rank $p$. Stratum
+effects use Spearman's $\rho$ and Kruskal--Wallis tests. \emph{Stage importance} is the spread of level means within a
+factor---the PSNR a wrong setting of that stage can cost within the swept range.
+
+\textbf{Bright-region masks} are computed on the \emph{clear} image (HSV $V>0.75$, $S<0.25$) so that they capture the
+intrinsically bright regions that violate the prior, not haze itself.
+
+\textbf{Compute.} All DCP runs are CPU-only (Kaggle, no accelerator); AOD-Net training/inference used the accelerator
+reported in the notebook. Per-image runtimes are reported alongside quality.
+
+%=========================== V ==========================================
+\section{Results}
+\subsection{Baseline against the model-free controls}
+On the test split the hazy input scores \inputPSNR{}\,dB / \inputSSIM{} and CLAHE \clahePSNR{}\,dB / \claheSSIM{}; the
+baseline DCP reaches \basePSNR{}\,dB / \baseSSIM{} (CIEDE2000 \baseCIEDE), a paired gain of \baseGain{}\,dB over the
+input. Fig.~\ref{fig:stages} shows the intermediate maps for a median-density test image.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_pipeline_stages.pdf}
+\caption{DCP stages on a median-density test image: input, dark channel, raw and refined transmission, recovered
+radiance, ground truth.}
+\label{fig:stages}
+\end{figure}
+
+\subsection{Stage attribution (H1)}
+Fig.~\ref{fig:ablation} and Table~\ref{tab:importance} rank the stages. The largest spread belongs to \impTop{}
+(\impTopVal{}\,dB) and the second to \impSecond{} (\impSecondVal{}\,dB); the individual spreads are: patch
+\impPatch, $A$-estimator \impAmethod, $\omega$ \impOmega, $t_0$ \impTzero, refinement \impRefine, guided-filter $r$
+\impGfr{} and $\epsilon$ \impGfeps{}\,dB. Removing refinement altogether changes PSNR by \refineNoneDelta{}\,dB
+(95\,\% CI [\refineNoneLo, \refineNoneHi], $p=\refineNoneP$).
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.98\textwidth]{fig_ablation_curves.pdf}\\[2pt]
+\includegraphics[width=0.98\textwidth]{fig_ablation_categorical.pdf}
+\caption{One-factor-at-a-time sensitivity on the test split. Top: numeric factors, PSNR with paired 95\,\% CIs versus the
+baseline (dashed) and SSIM. Bottom: $A$-estimator and refinement (violet = baseline level), and the resulting stage
+importance ranking.}
+\label{fig:ablation}
+\end{figure*}
+
+\begin{table}[t]
+\caption{Stage importance: spread of level means on the test split.}
+\label{tab:importance}
+\centering\footnotesize
+\includegraphics[width=0.7\columnwidth]{tab_stage_importance.png}
+\end{table}
+
+\subsection{Matting Laplacian versus guided filter}
+On \mattingN{} test images the original matting refinement differs from the guided filter by \mattingDelta{}\,dB
+(95\,\% CI [\mattingLo, \mattingHi], $p=\mattingP$) at \mattingMs{}\,ms versus \guidedMs{}\,ms per image.
+
+\subsection{Tuned configuration}
+Selecting the best level of each factor on the tuning split gives \emph{\tunedCfg}. On the test split it reaches
+\tunedPSNR{}\,dB / \tunedSSIM{} (CIEDE2000 \tunedCIEDE), a paired improvement of \tunedDelta{}\,dB over the baseline
+(95\,\% CI [\tunedDeltaLo, \tunedDeltaHi], $p=\tunedDeltaP$) and \tunedGain{}\,dB over the input
+(Table~\ref{tab:methods}).
+
+\begin{table}[t]
+\caption{Test-split comparison of the controls, the baseline and the tuned DCP. Paired $\Delta$ is against the baseline.}
+\label{tab:methods}
+\centering\footnotesize
+\includegraphics[width=\columnwidth]{tab_methods_test.png}
+\end{table}
+
+\subsection{Haze density (H3)}
+The tuned DCP gains \gainLight{}, \gainMedium{} and \gainDense{}\,dB over the input in the light, medium and dense strata
+(Fig.~\ref{fig:density}); Spearman $\rho(\text{density},\text{gain})=\rhoDensity$ ($p=\pDensity$), Kruskal--Wallis
+$p=\kruskalP$. The refinement effect (guided $-$ none) is \refLight{}, \refMedium{} and \refDense{}\,dB in the three
+strata.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_density.pdf}
+\caption{Gain of the tuned DCP over the hazy input by density stratum and by dataset, and the refinement effect per
+stratum (paired 95\,\% CIs).}
+\label{fig:density}
+\end{figure}
+
+\subsection{Failure analysis: bright regions (H2)}
+\label{sec:failure}
+\nBright{} test images contain a bright region in their clear image. Table~\ref{tab:bright} and
+Fig.~\ref{fig:bright} give the per-pixel error inside that region versus elsewhere for each $A$-estimator; the
+bright/elsewhere error ratios are \ratioBrightest{} (brightest), \ratioDcptop{} (dcp\_top), \ratioDcptopmean{}
+(dcp\_top\_mean) and \ratioQuadtree{} (quadtree). Across images, the bright fraction correlates with DCP's gain at
+$\rho=\rhoBright$ ($p=\pBright$). Fig.~\ref{fig:bestworst} shows the worst and best test cases.
+
+\begin{table}[t]
+\caption{Error inside bright regions vs.\ elsewhere per $A$-estimator (tuned configuration otherwise).}
+\label{tab:bright}
+\centering\footnotesize
+\includegraphics[width=\columnwidth]{tab_failure_bright.png}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_failure_bright.pdf}
+\caption{Where DCP fails: mean absolute error inside the bright-region mask vs.\ elsewhere, per $A$-estimator; and per-image
+gain against bright fraction.}
+\label{fig:bright}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.9\columnwidth]{fig_best_worst.pdf}
+\caption{Worst three (top) and best three (bottom) test images under the tuned configuration: input, transmission,
+output, ground truth.}
+\label{fig:bestworst}
+\end{figure}
+
+\subsection{Learned reference}
+On the same \nTestLearned{} test images (Table~\ref{tab:final}) AOD-Net scores \finAodPSNR{}\,dB / \finAodSSIM{}
+(CIEDE2000 \finAodCIEDE) versus \finTunedPSNR{}\,dB / \finTunedSSIM{} for the tuned DCP, a paired difference of
+\finAodDelta{}\,dB (95\,\% CI [\finAodLo, \finAodHi], $p=\finAodP$), at \finAodMs{} vs.\ \finTunedMs{}\,ms per image.
+The learned-minus-classical gap is \gapLight{}, \gapMedium{} and \gapDense{}\,dB in the light, medium and dense strata
+($\rho=\gapRho$, $p=\gapP$); AOD-Net wins on \winsLight{}, \winsMedium{} and \winsDense{}\,\% of the images in those
+strata (Fig.~\ref{fig:gap}).
+
+\begin{table}[t]
+\caption{Final comparison on the test split; paired $\Delta$ against the tuned DCP.}
+\label{tab:final}
+\centering\footnotesize
+\includegraphics[width=\columnwidth]{tab_final_comparison.png}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_learned_gap.pdf}
+\caption{AOD-Net minus tuned DCP by density stratum (paired 95\,\% CIs) and per image.}
+\label{fig:gap}
+\end{figure}
+
+%=========================== VI =========================================
+\section{Discussion and Insights}
+%% AUTHORS — write this section yourselves from the tables and figures above. Prompts:
+%%  (a) H1: which stage carries the result, and does the ranking depend on the swept range (patch 3 is a deliberately
+%%      bad level)? Distinguish "cost of a wrong setting" from "cost of omitting the stage" (refine = none).
+%%  (b) H2: do the A-estimators change the bright-region error more than the elsewhere error? Is the failure an A
+%%      problem or a transmission (prior-violation) problem? Use the ratio table.
+%%  (c) H3: does DCP's gain shrink with density? Does refinement matter more or less in dense haze? Does the learned
+%%      model's advantage grow with density?
+%%  (d) Real vs synthetic: compare O-HAZE / Dense-Haze rows against SOTS. Where does the synthetic-haze assumption break?
+%%  (e) What would you try next (e.g. sky-aware A, per-region omega, colour-guided filter)?
+\emph{To be written by the authors.}
+
+%=========================== VII ========================================
+\section{Threats to Validity}
+\textbf{Selection.} Hyper-parameters are chosen on the tuning split and reported on test (Section~\ref{sec:protocol}); the one-factor-at-a-time
+design does not explore interactions beyond the combined tuned configuration and the refinement$\times$density cross-cut.
+\textbf{Importance measure.} The spread depends on the swept range; we therefore also report the paired effect of
+removing a stage. \textbf{Real data.} NTIRE pairs are captured with a haze machine and are not pixel-perfectly aligned,
+which caps attainable PSNR; the no-reference descriptors $e$ and $\bar r$ are reported for that reason. \textbf{Density
+proxy.} The mean dark channel is itself DCP's prior and is inflated by intrinsically bright scenes; the bright-region
+masks are computed on clear images to decouple the two. \textbf{Learned reference.} AOD-Net is a small model trained under
+the route stated in Section~III-D; stronger learned dehazers would widen the gap and are not evaluated here.
+\textbf{Resolution.} All metrics are computed at $\le512$\,px.
+
+\section{Reproducibility}
+Three public Kaggle notebooks (\texttt{dehaze-dcp-pipeline}, \texttt{dehaze-ablation-eval},
+\texttt{dehaze-learned-reference}) run end-to-end on CPU from the attached benchmarks; the split fingerprint
+(\texttt{\splitFingerprint}), every per-image score (\texttt{dehaze\_per\_image\_scores.csv}), the tuned configuration and
+the macros that fill this document are written by the run. Seed 42 throughout; library versions are printed in the first
+cell.
+
+%=========================== VIII =======================================
+\section{Conclusion}
+%% AUTHORS — revise once the numbers are in; the sentences below only restate the macros.
+We decomposed the dark channel prior into independently ablatable stages and measured each one under a leakage-safe,
+paired protocol across \nDatasets{} benchmarks. The stage that most governs quality is \impTop{}, the tuned pipeline
+improves on the He \emph{et al.} defaults by \tunedDelta{}\,dB on held-out images, DCP's advantage over the input moves from
+\gainLight{}\,dB in light haze to \gainDense{}\,dB in dense haze, and its errors concentrate in intrinsically bright regions
+in proportion to the $A$-estimator used. Against a learned reference on identical images the gap is \gapLight{}\,dB in
+light haze and \gapDense{}\,dB in dense haze.
+
+\begin{thebibliography}{99}
+\bibitem{narasimhan2002} S.~G.~Narasimhan and S.~K.~Nayar, ``Vision and the atmosphere,'' \emph{Int.\ J.\ Comput.\ Vis.}, vol.~48, no.~3, pp.~233--254, 2002.
+\bibitem{he2009} K.~He, J.~Sun, and X.~Tang, ``Single image haze removal using dark channel prior,'' in \emph{Proc.\ CVPR}, 2009, pp.~1956--1963.
+\bibitem{he2011} K.~He, J.~Sun, and X.~Tang, ``Single image haze removal using dark channel prior,'' \emph{IEEE Trans.\ Pattern Anal.\ Mach.\ Intell.}, vol.~33, no.~12, pp.~2341--2353, 2011.
+\bibitem{he2010} K.~He, J.~Sun, and X.~Tang, ``Guided image filtering,'' in \emph{Proc.\ ECCV}, 2010, pp.~1--14; \emph{IEEE TPAMI}, vol.~35, no.~6, 2013.
+\bibitem{levin2008} A.~Levin, D.~Lischinski, and Y.~Weiss, ``A closed-form solution to natural image matting,'' \emph{IEEE Trans.\ Pattern Anal.\ Mach.\ Intell.}, vol.~30, no.~2, pp.~228--242, 2008.
+\bibitem{fattal2008} R.~Fattal, ``Single image dehazing,'' \emph{ACM Trans.\ Graph.}, vol.~27, no.~3, 2008.
+\bibitem{tan2008} R.~T.~Tan, ``Visibility in bad weather from a single image,'' in \emph{Proc.\ CVPR}, 2008.
+\bibitem{zhu2015} Q.~Zhu, J.~Mai, and L.~Shao, ``A fast single image haze removal algorithm using color attenuation prior,'' \emph{IEEE Trans.\ Image Process.}, vol.~24, no.~11, pp.~3522--3533, 2015.
+\bibitem{berman2016} D.~Berman, T.~Treibitz, and S.~Avidan, ``Non-local image dehazing,'' in \emph{Proc.\ CVPR}, 2016, pp.~1674--1682.
+\bibitem{kim2013} J.-H.~Kim, W.-D.~Jang, J.-Y.~Sim, and C.-S.~Kim, ``Optimized contrast enhancement for real-time image and video dehazing,'' \emph{J.\ Vis.\ Commun.\ Image Represent.}, vol.~24, no.~3, pp.~410--425, 2013.
+\bibitem{cai2016} B.~Cai, X.~Xu, K.~Jia, C.~Qing, and D.~Tao, ``DehazeNet: An end-to-end system for single image haze removal,'' \emph{IEEE Trans.\ Image Process.}, vol.~25, no.~11, pp.~5187--5198, 2016.
+\bibitem{ren2016} W.~Ren, S.~Liu, H.~Zhang, J.~Pan, X.~Cao, and M.-H.~Yang, ``Single image dehazing via multi-scale convolutional neural networks,'' in \emph{Proc.\ ECCV}, 2016.
+\bibitem{li2017} B.~Li, X.~Peng, Z.~Wang, J.~Xu, and D.~Feng, ``AOD-Net: All-in-one dehazing network,'' in \emph{Proc.\ ICCV}, 2017, pp.~4770--4778.
+\bibitem{qin2020} X.~Qin, Z.~Wang, Y.~Bai, X.~Xie, and H.~Jia, ``FFA-Net: Feature fusion attention network for single image dehazing,'' in \emph{Proc.\ AAAI}, 2020.
+\bibitem{song2023} Y.~Song, Z.~He, H.~Qian, and X.~Du, ``Vision transformers for single image dehazing,'' \emph{IEEE Trans.\ Image Process.}, vol.~32, pp.~1927--1941, 2023.
+\bibitem{li2019} B.~Li \emph{et al.}, ``Benchmarking single-image dehazing and beyond,'' \emph{IEEE Trans.\ Image Process.}, vol.~28, no.~1, pp.~492--505, 2019.
+\bibitem{ancuti2018o} C.~O.~Ancuti, C.~Ancuti, R.~Timofte, and C.~De~Vleeschouwer, ``O-HAZE: A dehazing benchmark with real hazy and haze-free outdoor images,'' in \emph{Proc.\ CVPR Workshops (NTIRE)}, 2018.
+\bibitem{ancuti2018i} C.~Ancuti, C.~O.~Ancuti, R.~Timofte, and C.~De~Vleeschouwer, ``I-HAZE: A dehazing benchmark with real hazy and haze-free indoor images,'' in \emph{Proc.\ ACIVS}, 2018.
+\bibitem{ancuti2019} C.~O.~Ancuti, C.~Ancuti, M.~Sbert, and R.~Timofte, ``Dense-Haze: A benchmark for image dehazing with dense-haze and haze-free images,'' in \emph{Proc.\ ICIP}, 2019.
+\bibitem{ancuti2020} C.~O.~Ancuti, C.~Ancuti, and R.~Timofte, ``NH-HAZE: An image dehazing benchmark with non-homogeneous hazy and haze-free images,'' in \emph{Proc.\ CVPR Workshops (NTIRE)}, 2020.
+\bibitem{wang2004} Z.~Wang, A.~C.~Bovik, H.~R.~Sheikh, and E.~P.~Simoncelli, ``Image quality assessment: From error visibility to structural similarity,'' \emph{IEEE Trans.\ Image Process.}, vol.~13, no.~4, pp.~600--612, 2004.
+\bibitem{sharma2005} G.~Sharma, W.~Wu, and E.~N.~Dalal, ``The CIEDE2000 color-difference formula: Implementation notes, supplementary test data, and mathematical observations,'' \emph{Color Res.\ Appl.}, vol.~30, no.~1, pp.~21--30, 2005.
+\bibitem{hautiere2008} N.~Hauti\`ere, J.-P.~Tarel, D.~Aubert, and \'E.~Dumont, ``Blind contrast enhancement assessment by gradient ratioing at visible edges,'' \emph{Image Anal.\ Stereol.}, vol.~27, no.~2, pp.~87--95, 2008.
+\end{thebibliography}
+
+\end{document}

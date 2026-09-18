@@ -6,6 +6,15 @@
 **Category (Idea Bank):** Filtering & Restoration → *Image dehazing using dark channel prior*
 **Chosen by:** 3-advisor council synthesis (research-impact ✓ · non-medical ✓ · viva-defensible ✓ · feasible ✓)
 
+> **Status (19 Sep 2026): code-complete.** The three notebooks (`dehaze-dcp-pipeline`, `dehaze-ablation-eval`,
+> `dehaze-learned-reference`) implement §4–§8 below, were executed end-to-end locally on the synthetic fallback and on a
+> Kaggle-layout fixture, and write every number the report needs (`numbers.tex`). What remains is the **Kaggle run on the
+> real benchmarks** and the authors' Discussion/Insights section — see [README.md](README.md) and
+> [../RUN_GUIDE.md](../RUN_GUIDE.md). Protocol additions since this plan was written: scene-grouped tune/test split
+> (selection on tune, reporting on test), paired bootstrap CIs + Wilcoxon on every comparison, a validated no-reference
+> density measure, a fourth A-estimator (`dcp_top_mean`), the matting-Laplacian refinement, CLAHE as a model-free control,
+> and bright-region masks computed on the clear image.
+
 > Swap note: to pivot to the runner-up (**cell counting via watershed**, CC0 microscopy data, max harness reuse),
 > say so and I re-issue this plan. Everything below assumes dehazing.
 
