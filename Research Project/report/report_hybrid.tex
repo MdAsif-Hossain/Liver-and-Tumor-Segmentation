@@ -1,0 +1,319 @@
+%=======================================================================
+%  Paper 2 (AI) — Where should learning enter a physics-based dehazing
+%  pipeline? A stage-wise study of the Dark Channel Prior.
+%
+%  Every number comes from the Kaggle run of NB 4 (dehaze-hybrid-stages):
+%    numbers_hybrid.tex   <- macros (hyb...)
+%    numbers.tex          <- paper 1's macros (NB 2), reused for the scaffold
+%    figures/*.pdf, tab_*.png
+%  Macros fall back to "??" so the document always compiles.
+%  %% AUTHORS sections are to be written by the group.
+%=======================================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\graphicspath{{figures/}}
+
+\InputIfFileExists{numbers.tex}{}{}
+\InputIfFileExists{numbers_hybrid.tex}{}{}
+\makeatletter
+\newcommand{\fb}[1]{\@ifundefined{#1}{\expandafter\newcommand\csname #1\endcsname{??}}{}}
+\makeatother
+% paper-1 macros used here
+\fb{nImages}\fb{nTune}\fb{nTest}\fb{nDatasets}\fb{dataSource}\fb{splitFingerprint}\fb{tunedCfg}\fb{tunedPSNR}\fb{basePSNR}\fb{inputPSNR}
+% NB 4 macros
+\fb{hybNTest}\fb{hybSeeds}\fb{hybSteps}\fb{hybTrainSource}\fb{hybNRealHazy}\fb{hybDevice}\fb{hybBestStage}\fb{hybBestStageGain}\fb{hybBrightN}
+\makeatletter
+\def\fbarm#1{\fb{hyb#1PSNR}\fb{hyb#1SSIM}\fb{hyb#1CIEDE}\fb{hyb#1Delta}\fb{hyb#1Lo}\fb{hyb#1Hi}\fb{hyb#1P}\fb{hyb#1Ms}\fb{hyb#1Params}%
+  \fb{hyb#1Light}\fb{hyb#1Medium}\fb{hyb#1Dense}\fb{hyb#1Synth}\fb{hyb#1Real}\fb{hyb#1Drop}%
+  \fb{hyb#1Bright}\fb{hyb#1Else}\fb{hyb#1Ratio}\fb{hyb#1BDelta}\fb{hyb#1BLo}\fb{hyb#1BHi}\fb{hyb#1BP}}
+\makeatother
+\fbarm{Input}\fbarm{Clahe}\fbarm{Base}\fbarm{Tuned}\fbarm{HA}\fbarm{HTsup}\fbarm{HTprior}\fbarm{HJ}\fbarm{HAll}\fbarm{Aod}
+
+\setlength{\textfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
+\setlength{\dbltextfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{0pt}
+
+\begin{document}
+
+\title{Where Should Learning Enter a Physics-Based Dehazing Pipeline?\\
+A Stage-Wise Study of the Dark Channel Prior}
+
+\author{
+\IEEEauthorblockN{Md.\ Asif Hossain \quad Nabil Subhan \quad K M Nudar}
+\IEEEauthorblockA{Department of Computer Science and Engineering, East West University, Dhaka, Bangladesh\\
+\{2022-3-60-007, 2022-3-60-063, 2022-3-60-234\}@std.ewubd.edu}
+}
+\maketitle
+
+\begin{abstract}
+Learned dehazers replace the whole physics-based pipeline of the dark channel prior (DCP) with a network, so it is not
+known \emph{which} of its stages actually benefits from learning. We keep the DCP pipeline as a fixed classical scaffold and
+replace one stage at a time---atmospheric light, transmission refinement, or radiance recovery---with a small residual
+module (17--23\,k parameters) trained with an identical budget of \hybSteps{} steps, then compare each hybrid, their
+composition and an end-to-end network (AOD-Net) trained on the same data, on the identical test split of
+\hybNTest{} images from \nDatasets{} benchmarks used in our companion classical study. All comparisons are paired against the
+tuned classical pipeline with bootstrap confidence intervals over \hybSeeds{} seeds. The stage that benefits most from
+learning is \hybBestStage{} (\hybBestStageGain{}\,dB); composing all three modules gives \hybHAllDelta{}\,dB and the
+end-to-end network \hybAodDelta{}\,dB relative to the tuned DCP. Training the transmission refiner with the dark
+channel prior itself as its loss, without ground truth, changes the bright-region error by \hybHTpriorBDelta{}
+(95\,\% CI [\hybHTpriorBLo, \hybHTpriorBHi]) whereas the same network trained with ground truth changes it by
+\hybHTsupBDelta{}, showing that a prior used as a loss inherits the prior's failure. Gains measured on synthetic haze
+transfer to real haze with a drop of \hybHAllDrop{}\,dB for the hybrid versus \hybAodDrop{}\,dB for the end-to-end
+model.
+\end{abstract}
+
+\begin{IEEEkeywords}
+image dehazing, dark channel prior, physics-informed learning, hybrid pipelines, unsupervised loss, ablation study
+\end{IEEEkeywords}
+
+%=========================== I ==========================================
+\section{Introduction}
+Single-image dehazing inverts the atmospheric scattering model $I = J\,t + A(1-t)$~\cite{narasimhan2002}. The dark
+channel prior (DCP)~\cite{he2009,he2011} solves it with a fixed sequence of classical stages---dark channel, atmospheric
+light $A$, raw transmission, transmission refinement, radiance recovery---while learned methods either predict a stage
+from data (DehazeNet~\cite{cai2016} and MSCNN~\cite{ren2016} regress $t$) or replace the whole pipeline
+(AOD-Net~\cite{li2017}, FFA-Net~\cite{qin2020}, DehazeFormer~\cite{song2023}). Comparisons between the two families
+report end results only, so three questions remain open: which classical stage is actually the bottleneck that
+learning should address; whether a prior can serve as a training signal without inheriting its known failure in bright
+regions; and whether keeping the physics scaffold helps a model trained on synthetic haze transfer to real haze.
+
+We answer them with a controlled design. The DCP pipeline, tuned in our companion study on a scene-grouped tuning split,
+is kept fixed. Three residual modules---$A = A_{\text{cls}} + \Delta A$, $t = t_{\text{guided}} + \Delta t$,
+$J = J_{\text{DCP}} + \Delta J$---each replace one stage; an untrained module reproduces the classical pipeline, so any
+gain is attributable to learning at that stage. All modules, their composition and an end-to-end AOD-Net are trained
+with the same data and step budget and evaluated under the same paired protocol. Our contributions:
+\begin{enumerate}
+  \item A stage-wise hybridisation of DCP with differentiable classical stages, so each learned module is trained
+        \emph{through} the fixed remainder of the pipeline and is an exact drop-in at inference.
+  \item A ranking of the stages by learning gain, with paired CIs over seeds, density strata and cost (H4).
+  \item A controlled test of the dark channel prior as an unsupervised loss: the same refiner trained with and
+        without ground truth, measured inside intrinsically bright regions (H5).
+  \item A sim-to-real transfer comparison between single-stage hybrids and an end-to-end model (H6).
+\end{enumerate}
+
+%=========================== II =========================================
+\section{Related Work}
+\textbf{Learning one stage.} DehazeNet~\cite{cai2016} and MSCNN~\cite{ren2016} learn the transmission map and keep the
+classical $A$ and recovery; their networks are trained on synthetic transmission targets, not through the pipeline.
+\textbf{Learning everything.} AOD-Net~\cite{li2017} folds $t$ and $A$ into one variable; later
+architectures~\cite{qin2020,song2023} scale capacity. \textbf{Priors as losses.} Golts \emph{et al.}~\cite{golts2020}
+trained a dehazing network with the DCP matting energy as an unsupervised loss; we adopt the simpler
+dark-channel-of-output loss and, unlike prior work, test it specifically where the prior is violated. \textbf{Guided
+filtering.} The guided filter~\cite{he2010} is differentiable~\cite{wu2018} and is used here as the classical stage the
+learned refiner corrects. \textbf{Benchmarks.} RESIDE~\cite{li2019} (ITS for training, SOTS for testing), O-HAZE,
+I-HAZE, Dense-Haze and NH-HAZE~\cite{ancuti2018o,ancuti2018i,ancuti2019,ancuti2020} for real haze.
+
+%=========================== III ========================================
+\section{Method}
+\subsection{Classical scaffold}
+The scaffold is the DCP pipeline with the configuration selected on the tuning split in our companion study
+(\emph{\tunedCfg}). Its stages are re-implemented differentiably for training: the dark channel is a channel-minimum
+followed by min-pooling (grey erosion), the guided filter~\cite{he2010} is four box filters (average pooling), and
+recovery is the closed-form $J = (I - A)/\max(t, t_0) + A$. The classical $A$-estimator is called on each training
+crop so that the same estimator is used at training and test time. At inference the NumPy stages of the companion
+study run and only the learned module executes in PyTorch.
+
+\subsection{Residual modules}
+\textbf{H-A} (\hybHAParams{} parameters): a four-stride convolutional encoder on a $128^2$ downsample of the hazy image,
+concatenated with the broadcast classical $A$, outputs $\Delta A\in[-0.3,0.3]^3$.
+\textbf{H-t} (\hybHTsupParams{}): a five-layer dilated convolutional network (dilations 1--8) on
+$[I,\,\tilde t,\,t_{\text{guided}},\,I^{\text{dark}}]$ outputs $\Delta t\in[-0.5,0.5]$, added to the guided-filter
+estimate.
+\textbf{H-J} (\hybHJParams{}): a four-layer network on $[I,\,J_{\text{DCP}},\,t]$ outputs $\Delta J\in[-0.25,0.25]^3$.
+All bounds are $\tanh$ scalings; outputs are clipped to valid ranges.
+
+\subsection{Training signals}
+H-A, H-t (sup), H-J and AOD-Net minimise the $L_1$ distance between the pipeline output and the clear image; for H-A
+and H-t the gradient flows through the fixed classical stages downstream of the module. \textbf{H-t (prior)} uses the
+same network as H-t (sup) but no ground truth:
+\begin{equation}
+  \mathcal{L} = \overline{\mathrm{dark}_{15}\!\bigl(J(t)\bigr)} + \lambda_a\,\|t - t_{\text{guided}}\|_1
+              + \lambda_{tv}\,\mathrm{TV}(t) + \lambda_r\,\mathcal{R}(J),
+  \label{eq:prior}
+\end{equation}
+with $\lambda_a=1$, $\lambda_{tv}=0.1$, $\lambda_r=1$ and $\mathcal{R}$ penalising values outside $[0,1]$. Because
+no ground truth is needed it trains on hazy images only, including \hybNRealHazy{} real hazy images of the tuning
+split that the supervised arms never see.
+
+\subsection{Arms}
+Ten arms are evaluated: the hazy input and CLAHE (model-free controls); the DCP baseline and the tuned DCP; H-A,
+H-t (sup), H-t (prior) trained with~\eqref{eq:prior}, H-J; \textbf{H-all} (H-A, H-t (sup) and H-J composed, each trained separately); and AOD-Net
+(\hybAodParams{} parameters) trained here with the same data and budget.
+
+%=========================== IV =========================================
+\section{Experimental Protocol}
+\textbf{Evaluation data} are the \nImages{} paired images (\dataSource) and the scene-grouped tuning/test split of the
+companion study (fingerprint \texttt{\splitFingerprint}); the notebook refuses to run on a different split. All reported
+numbers are on the \hybNTest{} test images. \textbf{Training data:} \hybTrainSource. Learned arms train for
+\hybSteps{} steps (batch 8, $224^2$ crops, Adam $10^{-3}$ with cosine decay) with \hybSeeds{} seeds on a \hybDevice;
+per-image scores are averaged over seeds before the paired statistics and the seed spread is reported.
+\textbf{Metrics and statistics} follow the companion study: PSNR, SSIM~\cite{wang2004}, CIEDE2000~\cite{sharma2005},
+Hautière's $e$ and $\bar r$~\cite{hautiere2008}; paired bootstrap 95\,\% CIs and Wilcoxon tests against the tuned DCP;
+density terciles from the mean dark channel of the input; bright-region masks from the \emph{clear} image
+(HSV $V>0.75$, $S<0.25$). The \emph{sim-to-real drop} of an arm is its mean gain on the synthetic test sets minus its
+mean gain on the real ones.
+
+%=========================== V ==========================================
+\section{Results}
+\subsection{Learning gain per stage (H4)}
+Table~\ref{tab:main} and Fig.~\ref{fig:gain} give every arm. Relative to the tuned DCP (\hybTunedPSNR{}\,dB), the
+single-stage hybrids change PSNR by \hybHADelta{} (H-A; CI [\hybHALo, \hybHAHi], $p=\hybHAP$), \hybHTsupDelta{}
+(H-t sup; [\hybHTsupLo, \hybHTsupHi], $p=\hybHTsupP$) and \hybHJDelta{}\,dB (H-J; [\hybHJLo, \hybHJHi],
+$p=\hybHJP$). The largest single-stage gain is at \hybBestStage{}. Composing the three modules gives
+\hybHAllDelta{}\,dB ([\hybHAllLo, \hybHAllHi]) and the end-to-end AOD-Net \hybAodDelta{}\,dB ([\hybAodLo, \hybAodHi]).
+
+\begin{table}[t]
+\caption{Every arm on the test split; paired $\Delta$ against the tuned DCP; seed spread of the mean PSNR.}
+\label{tab:main}
+\centering\footnotesize
+\includegraphics[width=\columnwidth]{tab_hybrid_main.png}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\columnwidth]{fig_hybrid_gain_per_stage.pdf}
+\caption{Learning gain per replaced stage, paired 95\,\% CIs against the tuned DCP.}
+\label{fig:gain}
+\end{figure}
+
+\subsection{Density and sim-to-real transfer (H6)}
+Fig.~\ref{fig:density} breaks the gains down by density stratum (Table~\ref{tab:stratum}) and by synthetic versus real
+test sets. The hybrid composition gains \hybHAllSynth{}\,dB on synthetic and \hybHAllReal{}\,dB on real haze (drop
+\hybHAllDrop{}); AOD-Net gains \hybAodSynth{} and \hybAodReal{}\,dB (drop \hybAodDrop{}). Per stage: H-A
+\hybHADrop{}, H-t (sup) \hybHTsupDrop{}, H-J \hybHJDrop{}\,dB.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_hybrid_by_density.pdf}
+\caption{Gain over the tuned DCP by density stratum (left) and on synthetic versus real test sets (right), paired 95\,\%
+CIs.}
+\label{fig:density}
+\end{figure}
+
+\begin{table}[t]
+\caption{$\Delta$PSNR (dB) against the tuned DCP by density stratum.}
+\label{tab:stratum}
+\centering\footnotesize
+\includegraphics[width=0.8\columnwidth]{tab_hybrid_by_stratum.png}
+\end{table}
+
+\subsection{The prior as a loss inside bright regions (H5)}
+On the \hybBrightN{} test images whose clear image contains a bright region, Table~\ref{tab:bright} and
+Fig.~\ref{fig:bright} report the per-pixel error inside the mask and elsewhere. The tuned DCP's bright/elsewhere error
+ratio is \hybTunedRatio{}. The supervised refiner changes the bright-region error by \hybHTsupBDelta{}
+([\hybHTsupBLo, \hybHTsupBHi], $p=\hybHTsupBP$); the prior-trained refiner by \hybHTpriorBDelta{}
+([\hybHTpriorBLo, \hybHTpriorBHi], $p=\hybHTpriorBP$). Fig.~\ref{fig:tmaps} shows the four transmission estimates on
+one such image.
+
+\begin{table}[t]
+\caption{Error inside bright regions vs.\ elsewhere per arm; $\Delta<0$ is better than the tuned DCP.}
+\label{tab:bright}
+\centering\footnotesize
+\includegraphics[width=\columnwidth]{tab_hybrid_bright.png}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_hybrid_bright.pdf}
+\caption{Bright-region failure per arm.}
+\label{fig:bright}
+\end{figure}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{fig_hybrid_tmaps.pdf}
+\caption{Transmission on a bright-region test image: raw, guided filter, learned with ground truth, learned with the
+prior as its loss; outputs through the identical recovery stage.}
+\label{fig:tmaps}
+\end{figure*}
+
+\subsection{Cost}
+Table~\ref{tab:cost} lists parameters, inference time and training time per arm; single-stage hybrids add
+\hybHTsupParams{}--\hybHAParams{} parameters and \hybHTsupMs{}\,ms per image to the classical pipeline
+(\hybTunedMs{}\,ms), against \hybAodMs{}\,ms for AOD-Net. Fig.~\ref{fig:qual} shows every arm on the same images.
+
+\begin{table}[t]
+\caption{Parameters, inference time and training time per arm.}
+\label{tab:cost}
+\centering\footnotesize
+\includegraphics[width=0.85\columnwidth]{tab_hybrid_cost.png}
+\end{table}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.98\textwidth]{fig_hybrid_qualitative.pdf}
+\caption{Same test images, every arm (rows: worst to best for the tuned DCP).}
+\label{fig:qual}
+\end{figure*}
+
+%=========================== VI =========================================
+\section{Discussion}
+%% AUTHORS — write from the tables. Prompts:
+%%  (H4) Which stage is the bottleneck? Does the composed hybrid exceed the sum of its parts, or do the modules
+%%       interfere? Is the end-to-end model ahead only because it also fixes A, t and J at once?
+%%  (H5) Did the prior-as-loss refiner lower t in bright regions (over-darkening)? Compare the two refiners' bright
+%%       vs elsewhere deltas — same network, same inputs, only the loss differs. What does that say about using
+%%       classical priors as training signals?
+%%  (H6) Which arm loses least on real haze? Is the physics scaffold acting as a regulariser? Look at Dense-Haze
+%%       specifically.
+%%  (cost) Where is the best accuracy per parameter / per millisecond?
+\emph{To be written by the authors.}
+
+\section{Threats to Validity}
+\textbf{Budget.} \hybSteps{} steps and 17--23\,k-parameter modules make this a study of \emph{where} learning enters,
+not of attainable accuracy; larger networks or longer training could reorder the arms. \textbf{Train/test mismatch.}
+Training uses PyTorch classical stages with replicate padding; inference uses the NumPy stages of the companion
+study. Modules are residual on the classical output, so the mismatch is a small input perturbation, but it is a
+mismatch. \textbf{Data.} The supervised arms train on synthetic RESIDE haze; only H-t (prior) sees real haze, which
+confounds the H5 and H6 comparisons in its favour on real sets and is why H5 is reported on all test images.
+\textbf{Selection.} The scaffold's hyper-parameters were tuned on the tuning split in the companion study; no
+selection touches the test split. \textbf{Seeds.} \hybSeeds{} seeds bound optimisation noise; more would tighten the
+CIs.
+
+\section{Reproducibility}
+NB 4 (\texttt{dehaze-hybrid-stages}) runs on Kaggle from the attached benchmarks and NB 2's output, checks the split
+fingerprint, trains every arm, writes per-image scores (\texttt{dehaze\_hybrid\_per\_image.csv}), weights per seed, and
+the macros that fill this document. Seed 42 for data; seeds 0--2 for training; library versions are printed.
+
+%=========================== VII ========================================
+\section{Conclusion}
+%% AUTHORS — revise once the numbers are in.
+Keeping the dark channel prior pipeline as a fixed scaffold and learning one stage at a time under an identical budget,
+the stage that benefits most from learning is \hybBestStage{} (\hybBestStageGain{}\,dB), the composed hybrid reaches
+\hybHAllDelta{}\,dB and the end-to-end model \hybAodDelta{}\,dB over the tuned classical pipeline. A refiner trained
+with the prior as its loss changes bright-region error by \hybHTpriorBDelta{} against \hybHTsupBDelta{} for its
+supervised twin, and the hybrid's sim-to-real drop is \hybHAllDrop{}\,dB against \hybAodDrop{}\,dB.
+
+\begin{thebibliography}{99}
+\bibitem{narasimhan2002} S.~G.~Narasimhan and S.~K.~Nayar, ``Vision and the atmosphere,'' \emph{Int.\ J.\ Comput.\ Vis.}, vol.~48, no.~3, pp.~233--254, 2002.
+\bibitem{he2009} K.~He, J.~Sun, and X.~Tang, ``Single image haze removal using dark channel prior,'' in \emph{Proc.\ CVPR}, 2009, pp.~1956--1963.
+\bibitem{he2011} K.~He, J.~Sun, and X.~Tang, ``Single image haze removal using dark channel prior,'' \emph{IEEE Trans.\ Pattern Anal.\ Mach.\ Intell.}, vol.~33, no.~12, pp.~2341--2353, 2011.
+\bibitem{he2010} K.~He, J.~Sun, and X.~Tang, ``Guided image filtering,'' in \emph{Proc.\ ECCV}, 2010; \emph{IEEE TPAMI}, vol.~35, no.~6, 2013.
+\bibitem{wu2018} H.~Wu, S.~Zheng, J.~Zhang, and K.~Huang, ``Fast end-to-end trainable guided filter,'' in \emph{Proc.\ CVPR}, 2018.
+\bibitem{cai2016} B.~Cai, X.~Xu, K.~Jia, C.~Qing, and D.~Tao, ``DehazeNet: An end-to-end system for single image haze removal,'' \emph{IEEE Trans.\ Image Process.}, vol.~25, no.~11, pp.~5187--5198, 2016.
+\bibitem{ren2016} W.~Ren, S.~Liu, H.~Zhang, J.~Pan, X.~Cao, and M.-H.~Yang, ``Single image dehazing via multi-scale convolutional neural networks,'' in \emph{Proc.\ ECCV}, 2016.
+\bibitem{li2017} B.~Li, X.~Peng, Z.~Wang, J.~Xu, and D.~Feng, ``AOD-Net: All-in-one dehazing network,'' in \emph{Proc.\ ICCV}, 2017, pp.~4770--4778.
+\bibitem{qin2020} X.~Qin, Z.~Wang, Y.~Bai, X.~Xie, and H.~Jia, ``FFA-Net: Feature fusion attention network for single image dehazing,'' in \emph{Proc.\ AAAI}, 2020.
+\bibitem{song2023} Y.~Song, Z.~He, H.~Qian, and X.~Du, ``Vision transformers for single image dehazing,'' \emph{IEEE Trans.\ Image Process.}, vol.~32, pp.~1927--1941, 2023.
+\bibitem{golts2020} A.~Golts, D.~Freedman, and M.~Elad, ``Unsupervised single image dehazing using dark channel prior loss,'' \emph{IEEE Trans.\ Image Process.}, vol.~29, pp.~2692--2701, 2020.
+\bibitem{li2019} B.~Li \emph{et al.}, ``Benchmarking single-image dehazing and beyond,'' \emph{IEEE Trans.\ Image Process.}, vol.~28, no.~1, pp.~492--505, 2019.
+\bibitem{ancuti2018o} C.~O.~Ancuti, C.~Ancuti, R.~Timofte, and C.~De~Vleeschouwer, ``O-HAZE: A dehazing benchmark with real hazy and haze-free outdoor images,'' in \emph{Proc.\ CVPR Workshops (NTIRE)}, 2018.
+\bibitem{ancuti2018i} C.~Ancuti, C.~O.~Ancuti, R.~Timofte, and C.~De~Vleeschouwer, ``I-HAZE: A dehazing benchmark with real hazy and haze-free indoor images,'' in \emph{Proc.\ ACIVS}, 2018.
+\bibitem{ancuti2019} C.~O.~Ancuti, C.~Ancuti, M.~Sbert, and R.~Timofte, ``Dense-Haze: A benchmark for image dehazing with dense-haze and haze-free images,'' in \emph{Proc.\ ICIP}, 2019.
+\bibitem{ancuti2020} C.~O.~Ancuti, C.~Ancuti, and R.~Timofte, ``NH-HAZE: An image dehazing benchmark with non-homogeneous hazy and haze-free images,'' in \emph{Proc.\ CVPR Workshops (NTIRE)}, 2020.
+\bibitem{wang2004} Z.~Wang, A.~C.~Bovik, H.~R.~Sheikh, and E.~P.~Simoncelli, ``Image quality assessment: From error visibility to structural similarity,'' \emph{IEEE Trans.\ Image Process.}, vol.~13, no.~4, pp.~600--612, 2004.
+\bibitem{sharma2005} G.~Sharma, W.~Wu, and E.~N.~Dalal, ``The CIEDE2000 color-difference formula: Implementation notes, supplementary test data, and mathematical observations,'' \emph{Color Res.\ Appl.}, vol.~30, no.~1, pp.~21--30, 2005.
+\bibitem{hautiere2008} N.~Hauti\`ere, J.-P.~Tarel, D.~Aubert, and \'E.~Dumont, ``Blind contrast enhancement assessment by gradient ratioing at visible edges,'' \emph{Image Anal.\ Stereol.}, vol.~27, no.~2, pp.~87--95, 2008.
+\end{thebibliography}
+
+\end{document}

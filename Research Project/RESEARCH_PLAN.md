@@ -13,7 +13,8 @@
 > [../RUN_GUIDE.md](../RUN_GUIDE.md). Protocol additions since this plan was written: scene-grouped tune/test split
 > (selection on tune, reporting on test), paired bootstrap CIs + Wilcoxon on every comparison, a validated no-reference
 > density measure, a fourth A-estimator (`dcp_top_mean`), the matting-Laplacian refinement, CLAHE as a model-free control,
-> and bright-region masks computed on the clear image.
+> and bright-region masks computed on the clear image. **Paper 2 (AI, stage-wise hybridisation) is planned in
+> [HYBRID_PLAN.md](HYBRID_PLAN.md) and implemented in `dehaze-hybrid-stages.ipynb` (NB 4).**
 
 > Swap note: to pivot to the runner-up (**cell counting via watershed**, CC0 microscopy data, max harness reuse),
 > say so and I re-issue this plan. Everything below assumes dehazing.

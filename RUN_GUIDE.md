@@ -63,7 +63,7 @@ Each method notebook ends with a clearly-marked **EXTRA — additional research 
 
 ---
 
-## Project 3 — Research: dehazing via Dark Channel Prior *(3 notebooks, code-complete, verified end-to-end locally)*
+## Project 3 — Research: dehazing via Dark Channel Prior *(4 notebooks, code-complete, verified end-to-end locally)*
 
 🖥️ **None** for NB 1–2 (pure NumPy/OpenCV, CPU). **T4** only for NB 3 if AOD-Net is trained there (minutes; CPU also works).
 Internet **Off** is fine — nothing is downloaded. Full details: [Research Project/README.md](Research%20Project/README.md).
@@ -73,6 +73,7 @@ Internet **Off** is fine — nothing is downloaded. Full details: [Research Proj
 | 1 | `dehaze-dcp-pipeline` | RESIDE-SOTS · O-HAZE · I-HAZE · Dense-Haze / NH-HAZE (any subset) | inventory table, split fingerprint, stage/refinement figures, density validation |
 | 2 | `dehaze-ablation-eval` | same datasets | 📤 `dehaze_results.json`, `numbers.tex`, per-image scores, all ablation / density / failure tables + figures |
 | 3 | `dehaze-learned-reference` | same datasets + **NB 2 output** (+ optional RESIDE-ITS or AOD-Net `.pth`) | `numbers_learned.tex`, final comparison, learned-vs-DCP gap by density |
+| 4 | `dehaze-hybrid-stages` *(paper 2, AI)* 🖥️ **T4** | same datasets + **NB 2 output** + **RESIDE-ITS** (training) | `numbers_hybrid.tex`, learning gain per stage, bright-region prior-as-loss test, sim-to-real, cost, weights per seed |
 
 **Layouts recognised:** a `hazy/` folder next to a `GT/` (or `gt/`, `clear/`) folder, paired by the leading number of the file
 name (`1400_1.png` ↔ `1400.png`, `01_outdoor_hazy.jpg` ↔ `01_outdoor_GT.jpg`). Anything under `ITS/`, `OTS/` or `train/` is
@@ -80,7 +81,8 @@ treated as **training-only** (excluded from evaluation, used by NB 3). **Check N
 
 **Timing.** NB 2 scores 19 configurations on every image: ≈ 0.2 s per (image, configuration) at 512 px → about 1.5–2 h for
 ~1,100 images (SOTS in+out capped at 500 each + the real sets). Lower `CONFIG["max_per_dataset"]` to shorten.
-NB 3 trains AOD-Net in ~5 min on a T4 (≈ 30 min on CPU) unless pretrained weights are attached.
+NB 3 trains AOD-Net in ~5 min on a T4 (≈ 30 min on CPU) unless pretrained weights are attached. NB 4 ≈ 1.5–2 h on a T4
+(3 seeds × 5 learned arms + evaluation of 10 arms); on CPU it drops to 1 seed / 600 steps automatically.
 
 **Protocol reminders.** Hyper-parameters are chosen on the *tune* split; report only the *test* tables. With no dataset
 attached the notebooks run on a synthetic fallback labelled `synthetic` — never report those numbers.
